@@ -128,5 +128,86 @@ namespace LC4Statistics
             }
 
         }
+        int mod(int x, int m)
+        {
+            return (x % m + m) % m;
+        }
+
+       
+
+        public void simulation()
+        {
+            int counter = 0;
+            Random rgen = new Random();
+            for (int r = 0; r < 1000000; r++)//repetitions
+            {
+                byte[] arr = GetRandomKey();
+                LC4 lc4 = new LC4(arr, 0, 0);
+                RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+                byte[] nonce = new byte[10];
+                randomNumberGenerator.GetBytes(nonce);
+                nonce = nonce.Select(x => (byte)(x % 36)).ToArray();
+
+                byte[] data = new byte[100];
+                randomNumberGenerator.GetBytes(data);
+                data = data.Select(x => (byte)(x % 36)).ToArray();
+
+                byte[] mac = new byte[10];
+                randomNumberGenerator.GetBytes(mac);
+                mac = mac.Select(x => (byte)(x % 36)).ToArray();
+
+                //usually nonce would be discarded, but to know what happens still take a look:
+                byte[] allDataClear = nonce.Concat(data).Concat(mac).ToArray();
+                byte[] chiffrat = new byte[allDataClear.Length];
+                List<string> information= new List<string>();
+                for (int k = 0; k < allDataClear.Length; k++)
+                {
+                    chiffrat[k] = lc4.SingleByteEncryption(allDataClear[k]);
+                    information.Add($"state: {lc4.State}, i: {lc4.I}, j:{lc4.J}, nstate: {lc4.GetNormalizedState()}, plain:{allDataClear[k]}, enc: {chiffrat[k]}");
+
+                    //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
+                }
+
+                //Random change at position 10 to 110:
+                int pos = rgen.Next(10, 109);
+                int changeDegree = rgen.Next(1, 35);
+                chiffrat[pos] = (byte)((chiffrat[pos] + changeDegree) % 36);
+                information.Add($"-----------------Changed at pos:{pos} by {changeDegree}");
+                lc4.Reset();
+
+
+                byte[] decrypted = new byte[chiffrat.Length];
+                for (int k = 0; k < chiffrat.Length; k++)
+                {
+                    decrypted[k] = lc4.SingleByteDecryption(chiffrat[k]);
+                    information.Add($"state: {lc4.State}, i: {lc4.I}, j:{lc4.J}, nstate: {lc4.GetNormalizedState()}, plain:{allDataClear[k]}, enc: {chiffrat[k]}, dec:{decrypted[k]}");
+
+                    //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
+                }
+
+                //check if signature is the same:
+                bool same = true;
+                for(int i = 100; i < 110; i++)
+                {
+                    if (decrypted[i] != allDataClear[i])
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+
+                if (same)
+                {
+                    information.Add("-----------------");
+                    information.Add("-----------------");
+                    File.AppendAllLines("false-auth.txt", information);
+                    counter++;
+                }
+            }
+            MessageBox.Show(counter.ToString());
+        }
+
+
     }
 }

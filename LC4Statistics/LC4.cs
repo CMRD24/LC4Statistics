@@ -239,7 +239,7 @@ namespace LC4Statistics
             //update state:
             State = rotateRowRight(State, r);
             c = (byte)((c + 1) % 6);
-            if (x == y)
+            if (x == r)
             {
                 y = (byte)((y + 1) % 6);
             }
