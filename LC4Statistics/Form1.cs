@@ -22,6 +22,7 @@ namespace LC4Statistics
 
         static void Shuffle<T>(T[] arr)
         {
+            
             Random rand = new Random();
             for (int i = arr.Length - 1; i >= 1; i--)
             {
@@ -34,13 +35,18 @@ namespace LC4Statistics
 
         private byte[] GetRandomKey()
         {
+            
             byte[] arr = new byte[36];
-            Random rand = new Random();
-            for (int i = 0; i < 36; i++)
+            RandomNumberGenerator numberGenerator = RandomNumberGenerator.Create();
+            numberGenerator.GetBytes(arr);
+            arr = arr.Select(x => (byte)(x % 36)).ToArray();
+            for(int i = 1; i < 36; i++)
             {
-                arr[i] = (byte)i; // initialize array with 0 to 35
+                while (arr.Take(i).Contains(arr[i]))
+                {
+                    arr[i] = (byte)((arr[i] + 1) % 36);
+                }
             }
-            Shuffle(arr);
             return arr;
         }
 
@@ -139,38 +145,43 @@ namespace LC4Statistics
         {
             int counter = 0;
             Random rgen = new Random();
-            for (int r = 0; r < 1000000; r++)//repetitions
+            int macLength = 4;
+            int dataLength = 100;
+            for (int r = 0; r < 10000000; r++)//repetitions
             {
                 byte[] arr = GetRandomKey();
                 LC4 lc4 = new LC4(arr, 0, 0);
+                List<string> information = new List<string>();
+                information.Add($"::::::key: {arr}");
                 RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
 
                 byte[] nonce = new byte[10];
                 randomNumberGenerator.GetBytes(nonce);
                 nonce = nonce.Select(x => (byte)(x % 36)).ToArray();
 
-                byte[] data = new byte[100];
+                byte[] data = new byte[dataLength];
                 randomNumberGenerator.GetBytes(data);
                 data = data.Select(x => (byte)(x % 36)).ToArray();
 
-                byte[] mac = new byte[10];
+                byte[] mac = new byte[macLength];
                 randomNumberGenerator.GetBytes(mac);
                 mac = mac.Select(x => (byte)(x % 36)).ToArray();
 
                 //usually nonce would be discarded, but to know what happens still take a look:
                 byte[] allDataClear = nonce.Concat(data).Concat(mac).ToArray();
                 byte[] chiffrat = new byte[allDataClear.Length];
-                List<string> information= new List<string>();
+                
+
                 for (int k = 0; k < allDataClear.Length; k++)
                 {
                     chiffrat[k] = lc4.SingleByteEncryption(allDataClear[k]);
-                    information.Add($"state: {lc4.State}, i: {lc4.I}, j:{lc4.J}, nstate: {lc4.GetNormalizedState()}, plain:{allDataClear[k]}, enc: {chiffrat[k]}");
+                    information.Add($"state: {LC4.BytesToString(lc4.State)}, i: {lc4.I}, j:{lc4.J}, nstate: {LC4.BytesToString(lc4.GetNormalizedState())}, plain:{allDataClear[k]}, enc: {chiffrat[k]}");
 
                     //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
                 }
 
-                //Random change at position 10 to 110:
-                int pos = rgen.Next(10, 109);
+                //Random change at position 10 to 100+10+macLength-1:
+                int pos = rgen.Next(10, dataLength + 10+macLength-1);
                 int changeDegree = rgen.Next(1, 35);
                 chiffrat[pos] = (byte)((chiffrat[pos] + changeDegree) % 36);
                 information.Add($"-----------------Changed at pos:{pos} by {changeDegree}");
@@ -181,14 +192,14 @@ namespace LC4Statistics
                 for (int k = 0; k < chiffrat.Length; k++)
                 {
                     decrypted[k] = lc4.SingleByteDecryption(chiffrat[k]);
-                    information.Add($"state: {lc4.State}, i: {lc4.I}, j:{lc4.J}, nstate: {lc4.GetNormalizedState()}, plain:{allDataClear[k]}, enc: {chiffrat[k]}, dec:{decrypted[k]}");
+                    information.Add($"state: {LC4.BytesToString(lc4.State)}, i: {lc4.I}, j:{lc4.J}, nstate: {LC4.BytesToString(lc4.GetNormalizedState())}, plain:{allDataClear[k]}, enc: {chiffrat[k]}, dec:{decrypted[k]}");
 
                     //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
                 }
 
                 //check if signature is the same:
                 bool same = true;
-                for(int i = 100; i < 110; i++)
+                for(int i = dataLength+10; i < dataLength+10+macLength; i++)
                 {
                     if (decrypted[i] != allDataClear[i])
                     {
@@ -196,6 +207,8 @@ namespace LC4Statistics
                         break;
                     }
                 }
+
+                
 
                 if (same)
                 {
@@ -208,6 +221,241 @@ namespace LC4Statistics
             MessageBox.Show(counter.ToString());
         }
 
+        public void booksimulation()
+        {
+            int counter = 0;
+            Random rgen = new Random();
+            int macLength = 4;
+            int dataLength = 100;
+            List<byte> bookData = new List<byte>();
+            foreach(FileInfo fi in new DirectoryInfo("text").EnumerateFiles())
+            {
+                bookData.AddRange(LC4.StringToByteState(File.ReadAllText(fi.FullName)));
+            }
+            for (int r = 0; r < 1000000; r++)//repetitions
+            {
+                byte[] arr = GetRandomKey();
+                LC4 lc4 = new LC4(arr, 0, 0);
+                List<string> information = new List<string>();
+                information.Add($"::::::key: {arr}");
+                RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
 
+                byte[] nonce = new byte[10];
+                randomNumberGenerator.GetBytes(nonce);
+                nonce = nonce.Select(x => (byte)(x % 36)).ToArray();
+
+                byte[] data = bookData.Skip(r).Take(100).ToArray();
+
+                byte[] mac = new byte[macLength];
+                randomNumberGenerator.GetBytes(mac);
+                mac = mac.Select(x => (byte)(x % 36)).ToArray();
+
+                //usually nonce would be discarded, but to know what happens still take a look:
+                byte[] allDataClear = nonce.Concat(data).Concat(mac).ToArray();
+                byte[] chiffrat = new byte[allDataClear.Length];
+
+
+                for (int k = 0; k < allDataClear.Length; k++)
+                {
+                    chiffrat[k] = lc4.SingleByteEncryption(allDataClear[k]);
+                    information.Add($"state: {LC4.BytesToString(lc4.State)}, i: {lc4.I}, j:{lc4.J}, nstate: {LC4.BytesToString(lc4.GetNormalizedState())}, plain:{allDataClear[k]}, enc: {chiffrat[k]}");
+
+                    //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
+                }
+
+                //Random change at position 10 to 100+10+macLength-1:
+                int pos = rgen.Next(10, dataLength + 10 + macLength - 1);
+                int changeDegree = rgen.Next(1, 35);
+                chiffrat[pos] = (byte)((chiffrat[pos] + changeDegree) % 36);
+                information.Add($"-----------------Changed at pos:{pos} by {changeDegree}");
+                lc4.Reset();
+
+
+                byte[] decrypted = new byte[chiffrat.Length];
+                for (int k = 0; k < chiffrat.Length; k++)
+                {
+                    decrypted[k] = lc4.SingleByteDecryption(chiffrat[k]);
+                    information.Add($"state: {LC4.BytesToString(lc4.State)}, i: {lc4.I}, j:{lc4.J}, nstate: {LC4.BytesToString(lc4.GetNormalizedState())}, plain:{allDataClear[k]}, enc: {chiffrat[k]}, dec:{decrypted[k]}");
+
+                    //File.AppendAllLines("test2.txt", new string[] { LC4.BytesToString(lc4.State) + " i:" + lc4.I + " j:" + lc4.J + ", clear:" + LC4.ByteToChar(data[k]) + ", enc:" + LC4.ByteToChar(chiffrat[k]) });
+                }
+
+                //check if signature is the same:
+                bool same = true;
+                for (int i = dataLength + 10; i < dataLength + 10 + macLength; i++)
+                {
+                    if (decrypted[i] != allDataClear[i])
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+
+
+
+                if (same)
+                {
+                    information.Add("-----------------");
+                    information.Add("-----------------");
+                    File.AppendAllLines($"false-auth (b)n={macLength}.txt", information);
+                    counter++;
+                }
+            }
+            MessageBox.Show(counter.ToString());
+        }
+
+        public double entropy<T>(T[] data)
+        {
+            int[] count = data.GroupBy(x => x).Select(x => x.Count()).ToArray();
+            var p = count.Select(x => x / (double)data.Length);
+            return -p.Select(x => x * Math.Log(x, 2)).Sum();
+        }
+
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            simulation();
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            booksimulation();
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            List<byte> bookData = new List<byte>();
+            foreach (FileInfo fi in new DirectoryInfo("text").EnumerateFiles())
+            {
+                bookData.AddRange(LC4.StringToByteState(File.ReadAllText(fi.FullName)));
+            }
+            MessageBox.Show(entropy(bookData.ToArray()).ToString());
+            LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+            byte[] encrpted = lc4.Encrypt(bookData.ToArray());
+            MessageBox.Show(entropy(encrpted).ToString());
+        }
+
+        public static T[][] Split<T>(IList<T> source, int size)
+        {
+            return source
+                .Select((x, i) => new { Index = i, Value = x })
+                .GroupBy(x => x.Index / size)
+                .Select(x => x.Select(v => v.Value).ToArray())
+                .ToArray();
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+            byte[] data = new byte[1000000];
+            randomNumberGenerator.GetBytes(data);
+            data = data.Select(x => (byte)(x % 36)).ToArray();
+            MessageBox.Show(entropy(data).ToString());
+            //MessageBox.Show(entropy(Split(data,2)).ToString());
+            LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+            byte[] encrpted = lc4.Encrypt(data.ToArray());
+            MessageBox.Show(entropy(encrpted).ToString());
+            //MessageBox.Show(entropy(Split(encrpted, 2)).ToString());
+        }
+
+        List<byte[]> l = new List<byte[]>();
+
+        private void ind()
+        {
+            byte[] data = { (byte)numericUpDown2.Value, (byte)numericUpDown3.Value };
+            //List<string> encList = new List<string>();
+            List<byte[]> encList = new List<byte[]>();
+            byte i = (byte)num_i.Value;
+            byte j = (byte)num_j.Value;
+            for(int k = 0; k < 100000; k++)
+            {
+                LC4 lc4 = new LC4(GetRandomKey(), i, j);
+                byte[] enc = lc4.Encrypt(data);
+                encList.Add(enc);
+
+            }
+            l = encList;
+            
+
+
+        }
+
+        private void testHypothesis()
+        {
+            byte[] arr = GetRandomKey();
+            LC4 lc4 = new LC4(arr, 0, 0);
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+            byte[] data = new byte[1000000];
+            randomNumberGenerator.GetBytes(data);
+            data = data.Select(x => (byte)(x % 36)).ToArray();
+            byte[] enc = lc4.Encrypt(data);
+            int counter = 0;
+            int counter2 = 0;
+
+            for (int i = 0; i < 1000000-1; i++)
+            {
+                if (enc[i] == 0)
+                {
+                    counter++;
+                    bool isTrue = (data[i] == 0 && enc[i + 1] == data[i + 1])
+                        || (data[i]!=0 && enc[i + 1] != data[i+1]);
+                    
+                    if (!isTrue)
+                    {
+                        MessageBox.Show("!");
+                    }
+                }
+                else if (data[i] == enc[i])
+                {
+                    counter2++;
+                    bool isTrue = (data[i + 1] != enc[i + 1]);
+                    if (!isTrue)
+                    {
+                        MessageBox.Show("!2");
+                    }
+                }
+            }
+            MessageBox.Show(counter.ToString());
+            MessageBox.Show(counter2.ToString());
+        }
+
+
+
+
+
+        private void button8_Click(object sender, EventArgs e)
+        {
+            ind();
+        }
+
+        private void button9_Click(object sender, EventArgs e)
+        {
+            
+        }
+
+        private void numericUpDown1_ValueChanged(object sender, EventArgs e)
+        {
+            chart1.Series[0].Points.Clear();
+            //chart1.ChartAreas[0].AxisX.IntervalType = System.Windows.Forms.DataVisualization.Charting.DateTimeIntervalType.Auto
+            //given first character
+            //int[] histogram = encList.Where(x => x[0] == 0).GroupBy(x => x[1]).Select(x => x.Count()).ToArray();
+            //for(int i=0;i<36;i++)
+            {
+                int i = (int)numericUpDown1.Value;
+                var v = l.Where(x => x[0] == i);
+                for (int j = 0; j < 36; j++)
+                {
+                    var d = v.Where(x => x[1] == j);
+
+                    chart1.Series[0].Points.AddXY(LC4.BytesToString(new byte[] { (byte)j }), d.Count());
+                }
+            }
+        }
+
+        private void button10_Click(object sender, EventArgs e)
+        {
+            testHypothesis();
+        }
     }
 }
