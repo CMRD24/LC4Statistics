@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
 using static System.Windows.Forms.AxHost;
+using System.Collections;
 
 namespace LC4Statistics
 {
@@ -367,7 +368,7 @@ namespace LC4Statistics
             List<byte[]> encList = new List<byte[]>();
             byte i = (byte)num_i.Value;
             byte j = (byte)num_j.Value;
-            for(int k = 0; k < 100000; k++)
+            for(int k = 0; k < 1000000; k++)
             {
                 LC4 lc4 = new LC4(GetRandomKey(), i, j);
                 byte[] enc = lc4.Encrypt(data);
@@ -418,6 +419,86 @@ namespace LC4Statistics
             }
             MessageBox.Show(counter.ToString());
             MessageBox.Show(counter2.ToString());
+            //yes, it is true!!!
+        }
+
+        //start not from 0!!!
+        private byte[][] extractFromFixedPart(List<byte[]> chiffrate, int start, int end)
+        {
+            byte[][] possiblePlaintexts = new byte[end-start][];
+             //is there a way?
+            //reconstruct message
+            for (int i = start-1; i < end - 1; i++)
+            {
+                int arrayIndex = i - start + 1;
+                var z = chiffrate.Where(x => x[i] == 0).Select(x => x[i + 1]);
+                if (allSame(z))
+                {
+                    possiblePlaintexts[arrayIndex] = new byte[] { z.First() };
+                }
+                else
+                {
+                    possiblePlaintexts[arrayIndex] = removeAll(z);
+                }
+            }
+
+            byte[] firstGuess = possiblePlaintexts.Select(x => x.First()).ToArray();
+            string guessedMessage = LC4.BytesToString(firstGuess);
+            MessageBox.Show(guessedMessage);
+            return possiblePlaintexts;
+        }
+
+
+        public void sameMessafeAttack()
+        {
+            List<byte[]> chiffrate = new List<byte[]>();
+            byte[] fixmessage = LC4.StringToByteState("diese_nachricht_ist_geheim");
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+            byte[] randomPart = new byte[100];
+            randomNumberGenerator.GetBytes(randomPart);
+            randomPart = randomPart.Select(x => (byte)(x % 36)).ToArray();
+            byte[] message = randomPart.Concat(fixmessage).ToArray();
+
+
+            for (int i = 0; i < 10000; i++)
+            {
+                LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+                byte[] c = lc4.Encrypt(message);
+                chiffrate.Add(c);
+            }
+            extractFromFixedPart(chiffrate, 100, 100 + fixmessage.Length);
+            
+        }
+
+        private byte[] removeAll(IEnumerable<byte> values)
+        {
+            List<byte> possible = new List<byte>();
+            for(int i = 0; i < 36; i++)
+            {
+                if (!values.Contains((byte)i))
+                {
+                    possible.Add((byte)i);
+                }
+            }
+            return possible.ToArray();
+        }
+
+        private bool allSame(IEnumerable<byte> values)
+        {
+            if (values.Count() == 0)
+            {
+                return true;
+            }
+            byte comp = values.First();
+            foreach(byte t in values)
+            {
+                if (t != comp)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
 
@@ -456,6 +537,11 @@ namespace LC4Statistics
         private void button10_Click(object sender, EventArgs e)
         {
             testHypothesis();
+        }
+
+        private void button11_Click(object sender, EventArgs e)
+        {
+            sameMessafeAttack();
         }
     }
 }
