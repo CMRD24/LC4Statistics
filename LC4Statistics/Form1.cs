@@ -11,6 +11,12 @@ using System.Windows.Forms;
 using System.IO;
 using static System.Windows.Forms.AxHost;
 using System.Collections;
+using System.Threading;
+using Newtonsoft.Json;
+using System.Data.OleDb;
+using System.Windows.Forms.DataVisualization.Charting;
+
+
 
 namespace LC4Statistics
 {
@@ -148,7 +154,11 @@ namespace LC4Statistics
             Random rgen = new Random();
             int macLength = 4;
             int dataLength = 100;
-            for (int r = 0; r < 10000000; r++)//repetitions
+            //int nonceLength = 10;
+            int[] successfulPositionChange = new int[104];
+            List<Tuple<byte[], byte[]>> lastStates = new List<Tuple<byte[], byte[]>>();
+            //List<int> successfulPositionChange = new List<int>();
+            for (int r = 0; r < 1000; r++)//repetitions
             {
                 byte[] arr = GetRandomKey();
                 LC4 lc4 = new LC4(arr, 0, 0);
@@ -156,17 +166,17 @@ namespace LC4Statistics
                 information.Add($"::::::key: {arr}");
                 RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
 
-                byte[] nonce = new byte[10];
-                randomNumberGenerator.GetBytes(nonce);
-                nonce = nonce.Select(x => (byte)(x % 36)).ToArray();
+                byte[] nonce = get36Rand(10);// new byte[10];
+                //randomNumberGenerator.GetBytes(nonce);
+                //nonce = nonce.Select(x => (byte)(x % 36)).ToArray();
 
-                byte[] data = new byte[dataLength];
-                randomNumberGenerator.GetBytes(data);
-                data = data.Select(x => (byte)(x % 36)).ToArray();
+                byte[] data = get36Rand(dataLength);//new byte[dataLength];
+                //randomNumberGenerator.GetBytes(data);
+                //data = data.Select(x => (byte)(x % 36)).ToArray();
 
-                byte[] mac = new byte[macLength];
-                randomNumberGenerator.GetBytes(mac);
-                mac = mac.Select(x => (byte)(x % 36)).ToArray();
+                byte[] mac = get36Rand(macLength);// new byte[macLength];
+                //randomNumberGenerator.GetBytes(mac);
+                //mac = mac.Select(x => (byte)(x % 36)).ToArray();
 
                 //usually nonce would be discarded, but to know what happens still take a look:
                 byte[] allDataClear = nonce.Concat(data).Concat(mac).ToArray();
@@ -186,6 +196,7 @@ namespace LC4Statistics
                 int changeDegree = rgen.Next(1, 35);
                 chiffrat[pos] = (byte)((chiffrat[pos] + changeDegree) % 36);
                 information.Add($"-----------------Changed at pos:{pos} by {changeDegree}");
+                byte[] last = lc4.GetNormalizedState();
                 lc4.Reset();
 
 
@@ -213,6 +224,8 @@ namespace LC4Statistics
 
                 if (same)
                 {
+                    successfulPositionChange[pos - 10]++;
+                    lastStates.Add(Tuple.Create(last, lc4.GetNormalizedState()));
                     information.Add("-----------------");
                     information.Add("-----------------");
                     File.AppendAllLines("false-auth.txt", information);
@@ -220,6 +233,15 @@ namespace LC4Statistics
                 }
             }
             MessageBox.Show(counter.ToString());
+            //successfulPositionChange[20] = 1; 
+            for (int i = 0; i < 104; i++)
+            {
+                if (successfulPositionChange[i] != 0)
+                {
+                    chart1.Series[0].Points.AddXY(i, successfulPositionChange[i]);
+                }
+                
+            }
         }
 
         public void booksimulation()
@@ -387,9 +409,9 @@ namespace LC4Statistics
             LC4 lc4 = new LC4(arr, 0, 0);
             RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
 
-            byte[] data = new byte[1000000];
-            randomNumberGenerator.GetBytes(data);
-            data = data.Select(x => (byte)(x % 36)).ToArray();
+            byte[] data = get36Rand(1000000);// new byte[1000000];
+            //randomNumberGenerator.GetBytes(data);
+            //data = data.Select(x => (byte)(x % 36)).ToArray();
             byte[] enc = lc4.Encrypt(data);
             int counter = 0;
             int counter2 = 0;
@@ -422,11 +444,93 @@ namespace LC4Statistics
             //yes, it is true!!!
         }
 
+        public struct Term
+        {
+            public Term(byte value1, byte value2, int index)
+            {
+                Value1 = value1;
+                Value2 = value2;
+                Index = index;
+            }
+            public byte Value1 { get; set; }
+            public byte Value2 { get; set; }
+
+            public int Index { get; set; }
+        }
+
+        /// <summary>
+        /// nur vom start bis endinex im jeweiligen chiffrat.
+        /// /// </summary>
+        /// <param name="chiffrate"></param>
+        /// <returns></returns>
+        private List<Term> build2KNF(List<byte[]> chiffrate, int start, int end)
+        {
+            List<Term> knf = new List<Term>();
+            foreach (byte[] b in chiffrate.Skip(start).Take(end - start))
+            {
+                for(int i = 0; i < b.Length-1; i++)
+                {
+                    if (b[i] != 0)
+                    {
+                        knf.Add(new Term(b[i], b[i+1], i));
+                    }
+                }
+            }
+            return knf;
+
+        }
+
+        private List<Term> removeTrueTerms(List<Term> terms, byte[][] possiblePlaintexts, int start)
+        {
+
+            for (int i = 0; i < possiblePlaintexts.Length - 1; i++)
+            {
+                int termIndex = i + start - 1;
+                if (possiblePlaintexts[i].Length == 1)
+                {
+                    byte sure = possiblePlaintexts[i][0];
+                    terms.RemoveAll(x => x.Index == termIndex && (x.Value1 != sure));
+                    terms.RemoveAll(x => x.Index == termIndex-1 && (x.Value2 != sure));
+                }
+            }
+            return terms;
+        }
+
+        private byte[][] removeAmbig(List<Term> terms, byte[][] possiblePlaintexts, int start)
+        {
+            for (int i = 0; i < possiblePlaintexts.Length; i++)
+            {
+                int termIndex = i + start - 1;
+                if (possiblePlaintexts[i].Length > 1)
+                {
+                    byte[] next = new byte[0];
+                    if (i < possiblePlaintexts.Length - 1)
+                    {
+                        next = possiblePlaintexts[i + 1]; //
+                    }
+                    byte[] prev = new byte[0];
+                    if (i > 0) { prev = possiblePlaintexts[i - 1]; }
+                    List<byte> newPoss = new List<byte>();
+                    foreach (byte possible in possiblePlaintexts[i])
+                    {
+                        bool notFullfiled1 = terms.Any(x => x.Index == termIndex && x.Value1 == possible && next.Contains(x.Value2));
+                        bool notFullfiled2 = terms.Any(x => x.Index == termIndex-1 && x.Value2 == possible && prev.Contains(x.Value2));
+                        if (!notFullfiled1 && !notFullfiled2)
+                        {
+                            newPoss.Add(possible);
+                        }
+                    }
+                    possiblePlaintexts[i] = newPoss.ToArray();
+                }
+            }
+            return possiblePlaintexts;
+        }
+
         //start not from 0!!!
         private byte[][] extractFromFixedPart(List<byte[]> chiffrate, int start, int end)
         {
             byte[][] possiblePlaintexts = new byte[end-start][];
-             //is there a way?
+
             //reconstruct message
             for (int i = start-1; i < end - 1; i++)
             {
@@ -442,12 +546,18 @@ namespace LC4Statistics
                 }
             }
 
+            //check knf:
+            List<Term> terms = build2KNF(chiffrate, start, end);
+            //terms = removeTrueTerms(terms, possiblePlaintexts, start);
+            //MessageBox.Show(terms.Count.ToString());
+            possiblePlaintexts = removeAmbig(terms, possiblePlaintexts, start);
+
+
             byte[] firstGuess = possiblePlaintexts.Select(x => x.First()).ToArray();
             string guessedMessage = LC4.BytesToString(firstGuess);
-            MessageBox.Show(guessedMessage);
+            //MessageBox.Show(guessedMessage);
             return possiblePlaintexts;
         }
-
 
         public void sameMessafeAttack()
         {
@@ -467,8 +577,54 @@ namespace LC4Statistics
                 byte[] c = lc4.Encrypt(message);
                 chiffrate.Add(c);
             }
-            extractFromFixedPart(chiffrate, 100, 100 + fixmessage.Length);
-            
+            byte[][] extracted = extractFromFixedPart(chiffrate, 100, 100 + fixmessage.Length);
+
+        }
+
+        public void sameMessafeAttackSim()
+        {
+            List<int[]> l = new List<int[]>();
+            for (int k = 0; k < 100; k++)
+            {
+                
+                List<byte[]> chiffrate = new List<byte[]>();
+                byte[] fixmessage = LC4.StringToByteState("diese_nachricht_ist_geheim");
+                RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+                byte[] randomPart = new byte[100];
+                randomNumberGenerator.GetBytes(randomPart);
+                randomPart = randomPart.Select(x => (byte)(x % 36)).ToArray();
+                byte[] message = randomPart.Concat(fixmessage).ToArray();
+
+
+                for (int i = 0; i < 10000; i++)
+                {
+                    LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+                    byte[] c = lc4.Encrypt(message);
+                    chiffrate.Add(c);
+                }
+                byte[][] extracted = extractFromFixedPart(chiffrate, 100, 100 + fixmessage.Length);
+                byte[] firstGuess = extracted.Select(x => x.First()).ToArray();
+                string guessedMessage = LC4.BytesToString(firstGuess);
+                File.AppendAllLines("attack-msg.txt", new string[] { $"{k}: {guessedMessage}" });
+                List<int> ambig = new List<int>();
+                for (int i = 1; i < 20; i++)
+                {
+                    ambig.Add(extracted.Where(x => x.Length == i).Count());
+
+                }
+                l.Add(ambig.ToArray());
+
+                File.AppendAllLines("attack-stat.txt", new string[] { $"{k}: {JsonConvert.SerializeObject(ambig)}" });
+            }
+            List<double> occProb = new List<double>();
+            for(int i = 0; i < 19; i++)
+            {
+                double p = (double)l.Select(x => x[i]).Sum() / (double)l.Count;
+                occProb.Add(p);
+            }
+            File.AppendAllLines("attack-stat2.txt", new string[] { $"occProb: {JsonConvert.SerializeObject(occProb)}" });
+
         }
 
         private byte[] removeAll(IEnumerable<byte> values)
@@ -536,12 +692,195 @@ namespace LC4Statistics
 
         private void button10_Click(object sender, EventArgs e)
         {
-            testHypothesis();
+            //testHypothesis();
+            byte[] key = new byte[] {4, 20, 23, 1, 5, 25, 6, 14, 7, 33, 9, 3, 11, 18, 12, 8, 22, 24, 35, 31, 13, 15, 19, 16, 0, 21, 10, 28, 26, 32, 17, 30, 34, 27, 29,2 };
+            MessageBox.Show(key.Length.ToString());
+            LC4 lc4 = new LC4(key, 0, 0);
+            textBox2.Text += string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+            lc4.SingleByteEncryption((byte)11);
+            textBox2.Text += string.Join(",", lc4.State.Select(x => ((int)x).ToString()))+Environment.NewLine+lc4.I+","+lc4.J;
+            
+            lc4.SingleByteEncryption((byte)19);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+           
+            lc4.SingleByteEncryption((byte)35);
+            textBox2.Text += Environment.NewLine+string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)7);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)8);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)5);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+            
+            lc4.SingleByteEncryption((byte)7);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)6);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)6);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)32);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)26);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)2);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)21);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)13);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)31);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+            
+            lc4.SingleByteEncryption((byte)10);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)4);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)27);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)26);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)22);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)12);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)35);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)11);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)25);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)31);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)23);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)4);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)24);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)19);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)25);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            lc4.SingleByteEncryption((byte)3);
+            textBox2.Text += Environment.NewLine + string.Join(",", lc4.State.Select(x => ((int)x).ToString())) + Environment.NewLine + lc4.I + "," + lc4.J;
+
+            //lc4.Reset();
+            //byte[] c = lc4.Encrypt(new byte[] {11,19,35 });
+            //MessageBox.Show(string.Join(",", c.Select(x => ((int)x).ToString())));
         }
 
         private void button11_Click(object sender, EventArgs e)
         {
             sameMessafeAttack();
+        }
+
+        private void button12_Click(object sender, EventArgs e)
+        {
+            sameMessafeAttackSim();
+        }
+
+        private void button13_Click(object sender, EventArgs e)
+        {
+            byte[] b = GetRandomKey();
+            LC4 lc4 = new LC4(b, 0, 0);
+            byte[] data = new byte[200];
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+            randomNumberGenerator.GetBytes(data);
+            data = data.Select(x => (byte)(x % 36)).ToArray();
+            byte[] enc = lc4.Encrypt(data);
+            File.AppendAllText("example-data.txt", Environment.NewLine + Environment.NewLine + "key: [" + string.Join(",", b.Select(x => ((int)x).ToString())) + "]");
+            File.AppendAllText("example-data.txt", Environment.NewLine + "data: [" + string.Join(",", data.Select(x => ((int)x).ToString())) + "]");
+            File.AppendAllText("example-data.txt", Environment.NewLine + "enc: [" + string.Join(",", enc.Select(x => ((int)x).ToString())) + "]");
+        }
+
+        List<List<byte[]>> bll = new List<List<byte[]>>();
+        List<byte[]> encs = new List<byte[]>();
+
+        public byte[] get36Rand(int nr)
+        {
+            byte[] b = new byte[nr*2];
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+            randomNumberGenerator.GetBytes(b);
+            return b.Where(x => x < 36 * 7).Select(x => (byte)(x % 36)).ToArray();
+        }
+
+        private void button14_Click(object sender, EventArgs e)
+        {
+            byte[] key = new byte[36];// GetRandomKey();
+            for(int i = 0; i < 36; i++)
+            {
+                key[i] = (byte)i;
+            }
+
+            key = GetRandomKey();
+            
+            
+            textBox1.Text = string.Join(",", key.Select(x => (int)x));
+            for (int i = 0; i < 1000000; i++)
+            {
+                LC4 lc4 = new LC4(key, 0, 0);
+                byte[] data = get36Rand(20);
+                byte[] enc = new byte[20];
+                List<byte[]> bl = new List<byte[]>();
+                for(int j = 0; j < 20; j++)
+                {
+                    enc[j] = lc4.SingleByteEncryption(data[j]);
+                    bl.Add(lc4.GetNormalizedState());
+                }
+                bll.Add(bl);
+                encs.Add(enc);
+            }
+            
+        }
+
+        private void numericUpDown4_ValueChanged(object sender, EventArgs e)
+        {
+            int index = (int)numericUpDown4.Value;
+            //int[] atIndexInState = bll[index].Select(x => x[0]).GroupBy(x => x).Select(x => x.Count()).ToArray();
+
+            chart1.Series[0].Points.Clear();
+            if (index < 1)
+            {
+                return;
+            }
+            for (int i = 0; i < 36; i++)
+            {
+                //int count = bll.Select(x => x[index]).Select(x => x[0]).Where(x => x == i).Count();
+                int count = encs.Where(x => x[0]==0).Select(x => ((x[index] - x[0])+36)%36).Where(x => x==i).Count();
+                chart1.Series[0].Points.AddXY(i, count);
+            }
+
+            /*int[] sums = new int[36];
+            for(int i = 0; i < 36; i++)
+            {
+                sums[i] = 
+            }*/
         }
     }
 }
