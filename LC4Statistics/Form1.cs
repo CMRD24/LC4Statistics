@@ -146,7 +146,28 @@ namespace LC4Statistics
             return (x % m + m) % m;
         }
 
-       
+       public struct SDiff
+        {
+            public SDiff(int pos, byte[] s1, byte[] s2)
+            {
+                Pos = pos;
+                S1 = s1;
+                S2 = s2;
+            }
+            public int Pos { get; set; }
+            public byte[] S1 { get; set; }
+            public byte[] S2 { get; set; }
+
+            public int Similarity()
+            {
+                int same = 0;
+                for(int i=0;i<S1.Length; i++)
+                {
+                    if (S1[i] == S2[i]) { same++; }
+                }
+                return same;
+            }
+        }
 
         public void simulation()
         {
@@ -156,10 +177,18 @@ namespace LC4Statistics
             int dataLength = 100;
             //int nonceLength = 10;
             int[] successfulPositionChange = new int[104];
-            List<Tuple<byte[], byte[]>> lastStates = new List<Tuple<byte[], byte[]>>();
+            List<SDiff> lastStates = new List<SDiff>();
             //List<int> successfulPositionChange = new List<int>();
-            for (int r = 0; r < 1000; r++)//repetitions
+            for (int r = 0; r < 100000000; r++)//repetitions
             {
+                label1.Invoke(new Action(() =>
+                {
+                    label1.Text = r.ToString();
+                }));
+                label2.Invoke(new Action(() =>
+                {
+                    label2.Text = counter.ToString();
+                }));
                 byte[] arr = GetRandomKey();
                 LC4 lc4 = new LC4(arr, 0, 0);
                 List<string> information = new List<string>();
@@ -225,23 +254,40 @@ namespace LC4Statistics
                 if (same)
                 {
                     successfulPositionChange[pos - 10]++;
-                    lastStates.Add(Tuple.Create(last, lc4.GetNormalizedState()));
+                    lastStates.Add(new SDiff(pos-10, last, lc4.GetNormalizedState()));
                     information.Add("-----------------");
                     information.Add("-----------------");
                     File.AppendAllLines("false-auth.txt", information);
                     counter++;
                 }
             }
-            MessageBox.Show(counter.ToString());
+            //MessageBox.Show(counter.ToString());
             //successfulPositionChange[20] = 1; 
-            for (int i = 0; i < 104; i++)
-            {
-                if (successfulPositionChange[i] != 0)
+            chart1.Invoke(new Action(() => { 
+                for (int i = 0; i < 104; i++)
                 {
-                    chart1.Series[0].Points.AddXY(i, successfulPositionChange[i]);
-                }
+                    if (successfulPositionChange[i] != 0)
+                    {
+                        chart1.Series[0].Points.AddXY(i, successfulPositionChange[i]);
+                    }
                 
-            }
+                }
+            }));
+
+            chart2.Invoke(new Action(() =>
+            {
+                for (int i = 0; i < 104; i++)
+                {
+                    var collect = lastStates.Where(x => x.Pos == i);
+                    if (collect.Count() != 0)
+                    {
+                        var sim = collect.Select(x => x.Similarity()).Average();
+                        chart2.Series[0].Points.AddXY(i, sim);
+                    }
+
+                }
+            }));
+
         }
 
         public void booksimulation()
@@ -337,7 +383,10 @@ namespace LC4Statistics
 
         private void button4_Click(object sender, EventArgs e)
         {
-            simulation();
+            Thread t = new Thread(new ThreadStart(() => { 
+                simulation();
+            }));
+            t.Start();
         }
 
         private void button5_Click(object sender, EventArgs e)
