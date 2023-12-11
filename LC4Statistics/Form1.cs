@@ -244,6 +244,52 @@ namespace LC4Statistics
             }
         }
 
+
+
+        private void testProp()
+        {
+            int st = 5;
+            int counter = 0;
+            int sameAfter = 3;
+            for(int i = 0; i < 100000; i++)
+            {
+                byte[] key = GetRandomKey();
+                LC4 lc4 = new LC4(key, 0, 0);
+                byte[] plain = get36Rand(st+1+sameAfter);
+
+                byte[] enc1 = lc4.Encrypt(plain);
+
+                byte changeValue = get36Rand(20).First(x => x != 0);
+                byte[] changedFirst = new byte[st+1+sameAfter];
+                changedFirst[0] = (byte)((plain[0] + changeValue) % 36);
+                for(int j = 1; j <= st+sameAfter;j++)
+                {
+                    changedFirst[j] = plain[j];
+                }
+                
+
+                LC4 lc4var = new LC4(key, 0, 0);
+                byte[] enc2 = lc4var.Encrypt(changedFirst);
+                bool tr = true;
+                for(int j = st+1; j < st + sameAfter+1; j++)
+                {
+                    if (enc2[j] != enc1[j])
+                    {
+                        tr = false;
+                    }
+                }
+                if (tr)
+                {
+                   // MessageBox.Show(((int)changeValue).ToString());
+                   // MessageBox.Show(LC4.BytesToString(plain) + Environment.NewLine + Environment.NewLine + LC4.BytesToString(changedFirst));
+                   // MessageBox.Show(LC4.BytesToString(enc1)+Environment.NewLine + Environment.NewLine + LC4.BytesToString(enc2));
+                    counter++;
+                }
+            }
+            MessageBox.Show(counter.ToString());
+
+        }
+
         public void booksimulation()
         {
             int counter = 0;
@@ -824,10 +870,10 @@ namespace LC4Statistics
 
         public byte[] get36Rand(int nr)
         {
-            byte[] b = new byte[nr*2];
+            byte[] b = new byte[nr*2+20];
             RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
             randomNumberGenerator.GetBytes(b);
-            return b.Where(x => x < 36 * 7).Select(x => (byte)(x % 36)).ToArray();
+            return b.Where(x => x < 36 * 7).Take(nr).Select(x => (byte)(x % 36)).ToArray();
         }
 
         private void button14_Click(object sender, EventArgs e)
@@ -881,6 +927,11 @@ namespace LC4Statistics
             {
                 sums[i] = 
             }*/
+        }
+
+        private void button15_Click(object sender, EventArgs e)
+        {
+            testProp();
         }
     }
 }
