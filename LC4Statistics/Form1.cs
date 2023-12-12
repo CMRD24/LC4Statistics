@@ -292,12 +292,52 @@ namespace LC4Statistics
 
 
 
-        private void testProp()
+        private void drawPropChart()
         {
-            int st = 5;
+            chart1.Series.Clear();
+            Thread t = new Thread(new ThreadStart(() => {
+            int rep = 100000;
+            for (int s = 2; s <= 4; s++)
+            {
+                    string sname = "|mac|=" + s.ToString();
+                Series ser = new Series("|mac|=" + s.ToString());
+                ser.ChartArea = "ChartArea1";
+                ser.Name = sname;
+
+                ser.ChartType = SeriesChartType.Line;
+                    chart1.Invoke(new Action(() => {
+                        chart1.Series.Add(ser);
+                    }));
+                    for (int st = 0; st < 30; st++)
+                    {
+                    int count = testProp(st, s, rep);
+                        string l = $"{s}:{st}:{rep}:{count}";
+                        label3.Invoke(new Action(() => {
+                            label3.Text = l;
+                        }));
+                    File.AppendAllLines("pr1.txt", new string[] { l });
+                        chart1.Invoke(new Action(() => {
+                            chart1.Series[sname].Points.AddXY(st, (double)count / (double)rep);
+                        }));
+
+                }
+                
+            }
+            }));
+            t.Start();
+        }
+
+
+        private int testProp(int st, int sameAfter, int repetitions)
+        {
+            //int st = 5;
             int counter = 0;
-            int sameAfter = 3;
-            for(int i = 0; i < 100000; i++)
+            //int sameAfter = 3;
+
+
+            
+
+            for (int i = 0; i < repetitions; i++)
             {
                 byte[] key = GetRandomKey();
                 LC4 lc4 = new LC4(key, 0, 0);
@@ -332,7 +372,9 @@ namespace LC4Statistics
                     counter++;
                 }
             }
-            MessageBox.Show(counter.ToString());
+
+            return counter;
+            //MessageBox.Show(counter.ToString());
 
         }
 
@@ -980,7 +1022,18 @@ namespace LC4Statistics
 
         private void button15_Click(object sender, EventArgs e)
         {
-            testProp();
+            
+        }
+
+        private void button16_Click(object sender, EventArgs e)
+        {
+            drawPropChart();
+        }
+
+        private void checkBox1_CheckedChanged(object sender, EventArgs e)
+        {
+            chart1.Series[0].Enabled = !checkBox1.Checked;
+            //chart1.Series[0].IsVisibleInLegend = false;
         }
     }
 }
