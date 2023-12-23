@@ -44,7 +44,7 @@ namespace LC4Statistics
             for(int k = 0; k < 36; k++)
             {
                 int index = ((I + k / 6) * 6) % 36 + ((J + k) % 6);
-                result[k] = State[index]; //todo: i and j correct? i think yes
+                result[k] = State[index]; 
             }
             
             return result;

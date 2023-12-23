@@ -169,6 +169,132 @@ namespace LC4Statistics
             }
         }
 
+        public void ind0Attack()
+        {
+            int count = 0;
+            List<int> zeros = new List<int>();
+            List<int> same = new List<int>();
+            for (int i = 0; i < 10000; i++)
+            {
+                byte[] key = GetRandomKey();
+                byte[] data0 = get36Rand(2000);
+                byte[] data1 = get36Rand(2000);
+                /*RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+                byte[] choose = new byte[1];
+                randomNumberGenerator.GetBytes(choose);
+                bool chosen0 = choose[0] % 2 == 0;*/
+
+                
+
+
+                LC4 lc4 = new LC4(key, 0, 0);
+                byte[] ciphertext = lc4.Encrypt(data0);
+                var c1 = distinguishNotSame(data1, ciphertext);
+                var c2 = distinguishNotSame(data0, ciphertext);
+                same.Add(c1.SameCount);
+                zeros.Add(c1.CipherZeros);
+                if (c2.IsNotSame)
+                {
+                    MessageBox.Show("something is wrong!");
+                }
+                if (c1.IsNotSame)
+                {
+                    count++;
+                }
+            }
+            MessageBox.Show($"success: {count}"+Environment.NewLine+$"zeros (avg): {zeros.Average()}" + Environment.NewLine + $"same (avg): {same.Average()}");
+
+
+        }
+
+        public double indAttackProb(int messageLength, int repetitions)
+        {
+            int count = 0;
+            List<int> zeros = new List<int>();
+            List<int> same = new List<int>();
+            for (int i = 0; i < repetitions; i++)
+            {
+                byte[] key = GetRandomKey();
+                byte[] data0 = get36Rand(messageLength);
+                byte[] data1 = get36Rand(messageLength);
+                /*RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
+
+                byte[] choose = new byte[1];
+                randomNumberGenerator.GetBytes(choose);
+                bool chosen0 = choose[0] % 2 == 0;*/
+
+
+
+
+                LC4 lc4 = new LC4(key, 0, 0);
+                byte[] ciphertext0 = lc4.Encrypt(data0);
+                byte[] ciphertext1 = lc4.Encrypt(data1);
+                var c1 = distinguishNotSame(data1, ciphertext0);
+                var c2 = distinguishNotSame(data0, ciphertext1);
+                var check1 = distinguishNotSame(data0, ciphertext0);
+                var check2 = distinguishNotSame(data1, ciphertext1);
+                same.Add(c1.SameCount);
+                zeros.Add(c1.CipherZeros);
+                if (check1.IsNotSame || check2.IsNotSame)
+                {
+                    MessageBox.Show("something is wrong!");
+                }
+                if (c1.IsNotSame || c2.IsNotSame)
+                {
+                    count++;
+                }
+            }
+
+            double safeprobability = (double)count / (double)repetitions;
+            double prob = safeprobability + 0.5 * (1 - safeprobability);
+            return prob;
+            //MessageBox.Show($"success: {count}" + Environment.NewLine + $"zeros (avg): {zeros.Average()}" + Environment.NewLine + $"same (avg): {same.Average()}");
+
+        }
+
+        public struct Distinguished
+        {
+            public bool IsNotSame { get; set; }
+            public int CipherZeros { get; set; }
+            public int SameCount { get; set; }
+        }
+
+        public Distinguished distinguishNotSame(byte[] plaintext, byte[] ciphertext)
+        {
+            bool isNotSame = false;
+            int cipherZeros = 0;
+            int same = 0;
+            for(int i = 0; i < plaintext.Length-1; i++)
+            {
+                if ((ciphertext[i]==0 && plaintext[i]==0 && ciphertext[i+1] != plaintext[i + 1])
+                    || (ciphertext[i] == 0 && plaintext[i] != 0 && ciphertext[i + 1] == plaintext[i + 1])
+                    || (plaintext[i] != 0 && plaintext[i] == ciphertext[i] && ciphertext[i + 1] == plaintext[i + 1])
+                    )
+                {
+                    isNotSame = true;
+                }
+
+                if (ciphertext[i] == 0)
+                {
+                    cipherZeros++;
+                }
+                if ( (plaintext[i] != 0 && plaintext[i] == ciphertext[i])
+                   )
+                {
+                    same++;
+                }
+
+
+            }
+            return new Distinguished
+            {
+                IsNotSame = isNotSame,
+                CipherZeros = cipherZeros,
+                SameCount = same
+            };
+        }
+
         public void simulation()
         {
             int counter = 0;
@@ -1034,6 +1160,224 @@ namespace LC4Statistics
         {
             chart1.Series[0].Enabled = !checkBox1.Checked;
             //chart1.Series[0].IsVisibleInLegend = false;
+        }
+
+        private void button17_Click(object sender, EventArgs e)
+        {
+            chart1.Series.Clear();
+            string sname = "p";
+            Series ser = new Series("p");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+            ser.BorderWidth = 2;
+            ser.ChartType = SeriesChartType.Line;
+            chart1.Series.Add(ser);
+            Series ser2 = new Series("p*");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "p*";
+            ser2.BorderWidth = 1;
+            ser2.IsValueShownAsLabel = false;
+            ser2.ChartType = SeriesChartType.Line;
+            chart1.Series.Add(ser2);
+            chart1.ChartAreas[0].AxisY.Minimum = 0.5;
+            chart1.ChartAreas[0].AxisY.Maximum = 1;
+
+            Thread t = new Thread(new ThreadStart(() => {
+                int rep = 1000;
+
+                for (int s = 5; s <= 2000; s+=5)
+                {
+
+                    double p = indAttackProb(s, rep);
+
+                    double m_0 = (((double)s-1) / 36);
+                    double m_e = (((double)s-1-m_0) / 36);
+                    double p_corr = 1 - Math.Pow(((double)(1 + 35 * 35) / (double)(36d * 36)), m_0) * Math.Pow((double)35 / (double)36, m_0);
+                    double p_ges = 2 * (p_corr) * (1 - p_corr) + p_corr * p_corr;
+                    double p_game = p_ges + 0.5 * (1 - p_ges);
+                    /*MessageBox.Show(m_0.ToString());
+                    MessageBox.Show(m_e.ToString());
+                    MessageBox.Show(p_corr.ToString());
+                    MessageBox.Show(p_ges.ToString());
+                    MessageBox.Show(p_game.ToString());*/
+                        chart1.Invoke(new Action(() => {
+                            chart1.Series[sname].Points.AddXY(s, p);
+                            chart1.Series["p*"].Points.AddXY(s, p_game);
+                        }));
+
+                }
+            }));
+            t.Start();
+        }
+
+
+
+        public void knownPlaintextAttack()
+        {
+            byte[] plaintext = get36Rand(20000);
+            byte[] key = GetRandomKey();
+            LC4 lc4 = new LC4(key, 0, 0);
+            byte[][] nstates = new byte[20000][];
+            byte[] ciphertext = new byte[20000];
+
+            for(int i = 0; i < plaintext.Length; i++)
+            {
+                nstates[i] = lc4.GetNormalizedState();
+                ciphertext[i] = lc4.SingleByteEncryption(plaintext[i]);
+            }
+
+            byte[] recoveredIthKey = new byte[36];
+
+            //recover key from ciphertext and plaintext only:
+            byte[] rstate = new byte[36];
+            for(int i = 0; i < 36; i++)
+            {
+                rstate[i] = 255;
+            }
+            for(int i = 0; i < plaintext.Length - 27; i++)
+            {
+                //rstate only thought for for state i+1
+                if (plaintext[i] == ciphertext[i])
+                {
+                    //first assumption: S_0(0)=0
+                    if (nstates[i][0] != 0)
+                    {
+                        MessageBox.Show("no!");
+                    }
+                    //second assumption: 0 at matrix position defined by ciphertext_i
+                    int right = ciphertext[i] % 6;
+                    int down = ciphertext[i] / 6;
+                    int linearNullIndex = (6 - right)%6 + 6*((6 - down)%6);
+                    bool assumption2 = nstates[i + 1][linearNullIndex] == 0;
+                    if (!assumption2)
+                    {
+                        MessageBox.Show("no!2");
+                        MessageBox.Show(linearNullIndex.ToString()+"::"+Array.FindIndex(nstates[i], x => x==0).ToString() + Environment.NewLine + Environment.NewLine 
+                            + Array.FindIndex(nstates[i+1], x => x == 0).ToString() +
+                            Environment.NewLine+Environment.NewLine+"plain: " + plaintext[i]+",cipher: " + ciphertext[i]);
+                    
+                    }
+
+                    rstate[linearNullIndex] = 0; //known for sure
+
+                    //assumption 2 a: null trackable also in next states (only with probability):
+                    /*int right2 = ciphertext[i+1] % 6;
+                    int down2 = ciphertext[i+1] / 6;
+                    int linearNullIndex2 = (6 - right) % 6 + 6 * ((6 - down) % 6);
+                    bool assumption2a = nstates[i + 2][linearNullIndex2] == 0;
+                    if (!assumption2)
+                    {
+                        MessageBox.Show("no!2");
+                        MessageBox.Show(linearNullIndex.ToString() + "::" + Array.FindIndex(nstates[i], x => x == 0).ToString() + Environment.NewLine + Environment.NewLine
+                            + Array.FindIndex(nstates[i + 1], x => x == 0).ToString() +
+                            Environment.NewLine + Environment.NewLine + "plain: " + plaintext[i] + ",cipher: " + ciphertext[i]);
+
+                    }*/
+
+
+                    //assumption 3
+                    if (plaintext[i+1]==0)
+                    {
+                        int indexOfPlaintext = linearNullIndex;
+                        //possible combinations:
+                        bool combinationSeen = false;
+                        for(byte j = 1; j < 36;j++)
+                        {
+                            //use local copy of state:
+                            byte[] rstate_a = new byte[36];
+                            Array.Copy(rstate, rstate_a, 36);
+
+                            int S_0 = j;
+                            int cipherPosition = (indexOfPlaintext + S_0) % 6 + (((indexOfPlaintext / 6 + S_0 / 6)) % 6) * 6;
+                            if (rstate_a[0]!=255 || rstate_a[cipherPosition] != 255)
+                            {
+                                break;
+                            }
+                            rstate_a[0] = j;
+                            rstate_a[cipherPosition] = ciphertext[i + 1];
+                            //one of these 35 combinations
+
+
+
+
+                            //soundness check
+                            if (nstates[i + 1][cipherPosition] == ciphertext[i+1] && nstates[i + 1][0] == S_0)
+                            {
+                                combinationSeen = true;
+                                //check further assumptions:
+                                //S0 of i+2 has to be in field defined by ciphertext[i+1] (r/d)
+                                //set this field to any value not yet given:
+                                for(byte k = 1; k < 36; k++)
+                                {
+                                    if(S_0==k || k == ciphertext[i + 1])
+                                    {
+                                        continue;
+                                    }
+                                    int s0position = ciphertext[i+1] % 6 + (ciphertext[i+1] / 6) * 6;
+                                    //assert nstates[i + 1][s0position] == k;
+                                    //calculate the possible relative positions:
+                                    if (ciphertext[i + 2] == k)
+                                    {
+
+                                    }
+                                    else if (plaintext[i + 2] == k)
+                                    {
+
+                                    }
+                                    else if (ciphertext[i + 2] == 0)
+                                    {
+
+                                    }
+                                    else if (plaintext[i + 2] == 0)
+                                    {
+
+                                    }
+                                    else if (ciphertext[i + 2] == ciphertext[i+1])
+                                    {
+
+                                    }
+                                    else if (plaintext[i + 2] == ciphertext[i+1])
+                                    {
+
+                                    }
+                                    else
+                                    {
+                                        //assert position of plaintext[i+2]
+                                        //for...
+                                    }
+                                }
+
+
+                            }
+
+                            //continue with three known 
+                        }
+
+                        if (!combinationSeen)
+                        {
+                            MessageBox.Show("false");
+                        }
+                        else
+                        {
+                            MessageBox.Show("true");
+                        }
+
+                    }
+                    else if(ciphertext[i + 1] == 0)
+                    {
+
+                    }
+                }
+            }
+
+            
+
+
+        }
+
+        private void button18_Click(object sender, EventArgs e)
+        {
+            knownPlaintextAttack();
         }
     }
 }
