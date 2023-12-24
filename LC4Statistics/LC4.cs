@@ -91,11 +91,17 @@ namespace LC4Statistics
             {
                 return (char)(b + 48);
             }
-            else if (b >= 10)
+            else if (b >= 10 && b<36)
             {
                 return (char)(b + 87);
             }
-            return (char)95;
+            else if (b == 1)
+            {
+                return (char)95;
+            }
+            //invalid: '?'
+            return (char)63;
+            
         }
 
         public static byte[] StringToByteState(string str)

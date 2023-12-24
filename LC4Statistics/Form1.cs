@@ -1211,6 +1211,28 @@ namespace LC4Statistics
         }
 
 
+        bool setStateField(byte[] state, int index, byte value)
+        {
+            if(index<0 || index > 35)
+            {
+                MessageBox.Show("???"+index);
+            }
+            if (state[index]!=255 && state[index] != value)
+            {
+                return false;
+            }
+            int i = Array.FindIndex(state, x => x==value);
+            if (i != -1)
+            {
+                if (i != index)
+                {
+                    return false;
+                }
+                return true;
+            }
+            state[index] = value;
+            return true;
+        }
 
         public void knownPlaintextAttack()
         {
@@ -1229,11 +1251,7 @@ namespace LC4Statistics
             byte[] recoveredIthKey = new byte[36];
 
             //recover key from ciphertext and plaintext only:
-            byte[] rstate = new byte[36];
-            for(int i = 0; i < 36; i++)
-            {
-                rstate[i] = 255;
-            }
+            
             for(int i = 0; i < plaintext.Length - 27; i++)
             {
                 //rstate only thought for for state i+1
@@ -1258,7 +1276,7 @@ namespace LC4Statistics
                     
                     }
 
-                    rstate[linearNullIndex] = 0; //known for sure
+                    
 
                     //assumption 2 a: null trackable also in next states (only with probability):
                     /*int right2 = ciphertext[i+1] % 6;
@@ -1278,29 +1296,199 @@ namespace LC4Statistics
                     //assumption 3
                     if (plaintext[i+1]==0)
                     {
+                        byte[] rstate = new byte[36];
+                        for (int o = 0; o < 36; o++)
+                        {
+                            rstate[o] = 255;
+                        }
+                        rstate[linearNullIndex] = 0; //known for sure
                         int indexOfPlaintext = linearNullIndex;
                         //possible combinations:
-                        bool combinationSeen = false;
+                        //bool combinationSeen = false;
+                        List<byte[]> plausibleStates = new List<byte[]>();
                         for(byte j = 1; j < 36;j++)
                         {
-                            //use local copy of state:
+                            //use local copy of state:indexOfPlaintext
                             byte[] rstate_a = new byte[36];
                             Array.Copy(rstate, rstate_a, 36);
 
                             int S_0 = j;
                             int cipherPosition = (indexOfPlaintext + S_0) % 6 + (((indexOfPlaintext / 6 + S_0 / 6)) % 6) * 6;
-                            if (rstate_a[0]!=255 || rstate_a[cipherPosition] != 255)
+                            /*if (rstate_a[0]!=255 || rstate_a[cipherPosition] != 255)
                             {
-                                break;
+                                continue;
                             }
                             rstate_a[0] = j;
-                            rstate_a[cipherPosition] = ciphertext[i + 1];
+                            rstate_a[cipherPosition] = ciphertext[i + 1];*/
+                            if (!setStateField(rstate_a, 0, j))
+                            {
+                                continue;
+                            }
+                            if (!setStateField(rstate_a, cipherPosition, ciphertext[i + 1]))
+                            {
+                                continue;
+                            }
+
+
+
                             //one of these 35 combinations
 
+                            //S0 of i+2 has to be in field defined by ciphertext[i+1] (r/d)
+                            //set this field to any value not yet given:
+                            //this is a guess because we are looking ate the pre-encryption state of i+1, the post-encryption
+                            //state is dependant of plain and cipher positions in i+1 (plain[i+1]=0 at indexOfPlaintext, 
+
+                            int startindex = 0;
+                            if (indexOfPlaintext / 6 == 0)
+                            {
+                                startindex = 1;
+                            }
+                            if(cipherPosition%6 == startindex)
+                            {
+                                startindex += 6;
+                            }
+
+                            int post_s0_i2_position = (ciphertext[i+1]+startindex) % 6 + ((ciphertext[i+1] / 6 + startindex/6)%6) * 6;
 
 
 
+
+                            //-> take previous into account to make det. -1 or -7 or stays:
+                            //plainrow = s0_i2_position row
+                            int pre_s0_i2_position = post_s0_i2_position;
+                            if (cipherPosition % 6 == post_s0_i2_position % 6)
+                            {
+                                pre_s0_i2_position = pre_s0_i2_position % 6 + (((pre_s0_i2_position / 6) - 1) % 6) * 6;
+                            }
+                            if ((int)(indexOfPlaintext/6) == (int)(pre_s0_i2_position / 6))
+                            {
+                                pre_s0_i2_position = (pre_s0_i2_position - 1)%6 + (pre_s0_i2_position / 6)*6;
+                            }
+
+
+
+
+
+
+                            //soundness check:
+                            if (rstate_a[0] == nstates[i + 1][0])
+                            {
+                                MessageBox.Show($"ciphertext[i+1]: {(int)ciphertext[i + 1]}" + Environment.NewLine +
+                                $"calc.pos: {pre_s0_i2_position}" + Environment.NewLine +
+                                $"s_i+1 at pos: {nstates[i + 1][pre_s0_i2_position]}" + Environment.NewLine +
+                                $"s_i+2 at 0: {nstates[i + 2][0]}" + Environment.NewLine+
+                                $"changed row/column?: {pre_s0_i2_position!=post_s0_i2_position}" + Environment.NewLine+
+                                $"correct pos: {Array.FindIndex(nstates[i+1], x => x==nstates[i + 2][0])}" + Environment.NewLine+
+                                $"plaintext pos: {Array.FindIndex(nstates[i + 1], x => x == plaintext[i+1])}" + Environment.NewLine+
+                                $"encr pos: {Array.FindIndex(nstates[i + 1], x => x == ciphertext[i + 1])}" + Environment.NewLine
+                                );
+
+                                //soundness check:
+                                bool sound = nstates[i + 1][pre_s0_i2_position] == nstates[i + 2][0];
+
+                                if (!sound)
+                                {
+                                    MessageBox.Show("unsound");
+                                }
+                                else
+                                {
+                                    MessageBox.Show("sound");
+                                }
+                            }
+
+                            
+
+
+
+                            for (byte i2 = 1; i2 < 36; i2++)
+                            {
+                                //copy to local state:
+                                byte[] rstate_b = new byte[36];
+                                Array.Copy(rstate_a, rstate_b, 36);
+
+                                
+                                //take look at plaintext[i+2] and ciphertext[i+2]
+                                if(!setStateField(rstate_b, pre_s0_i2_position, i2))
+                                {
+                                    continue;
+                                }
+
+
+                                if (Array.IndexOf(rstate_b, plaintext[i + 2])!=-1)
+                                {
+                                    //calculate position of plaintext:
+                                    int from = Array.IndexOf(rstate_b, plaintext[i + 2]);
+                                    int ct_pos = (from + i2) % 6 + (((from / 6 + i2 / 6)) % 6) * 6;
+                                    /*if (rstate_b[ct_pos] != 255 && rstate_b[ct_pos] != ciphertext[i + 2])
+                                    {
+                                        continue;
+                                    }
+                                    rstate_b[ct_pos] = ciphertext[i + 2];*/
+                                    if(!setStateField(rstate_b, ct_pos, ciphertext[i + 2]))
+                                    {
+                                        continue;
+                                    }
+                                    //now 5 != 0 and 3 fixed
+                                    plausibleStates.Add(rstate_b);
+                                }
+                                else if (Array.IndexOf(rstate_b, ciphertext[i + 2]) != -1)
+                                {
+                                    //calculate position of plaintext:
+                                    int from = Array.IndexOf(rstate_b, plaintext[i + 2]);
+                                    int ct_pos = (from - i2+6) % 6 + (((from / 6 - i2 / 6)+6) % 6) * 6;
+                                    
+                                    /*if (rstate_b[ct_pos]!=255 && rstate_b[ct_pos] != ciphertext[i + 2])
+                                    {
+                                        continue;
+                                    }
+                                    rstate_b[ct_pos] = ciphertext[i + 2];*/
+                                    if (!setStateField(rstate_b, ct_pos, ciphertext[i + 2]))
+                                    {
+                                        continue;
+                                    }
+                                    //now 5 != 0 and 3 fixed
+                                    plausibleStates.Add(rstate_b);
+                                }
+                                else
+                                {
+
+                                    //go throught possible positions in rstate_b to set to plaintext[i+2]
+                                    foreach(int r in EM.FindAllIndexof(rstate_b, (byte)255))
+                                    {
+                                        byte[] rstate_c = new byte[36];
+                                        Array.Copy(rstate_b, rstate_c, 36);
+                                        //rstate_c[r] = plaintext[i+2];
+                                        if (!setStateField(rstate_b, r, plaintext[i + 2]))
+                                        {
+                                            continue;
+                                        }
+                                        int ct_pos = (r + i2) % 6 + (((r / 6 + i2 / 6)) % 6) * 6;
+                                        /*if (rstate_c[ct_pos] != 255 && rstate_c[ct_pos] != ciphertext[i + 2])
+                                        {
+                                            continue;
+                                        }
+                                        rstate_c[ct_pos] = ciphertext[i + 2];*/
+                                        if (!setStateField(rstate_b, ct_pos, ciphertext[i + 2]))
+                                        {
+                                            continue;
+                                        }
+
+                                        //now 6 !=0 and 3 fixed
+
+                                        //todo check if correct one is always among seen states
+                                        plausibleStates.Add(rstate_c);
+                                    }
+
+                                }
+
+
+                            }
+                            
+                            
                             //soundness check
+
+
+                            /*
                             if (nstates[i + 1][cipherPosition] == ciphertext[i+1] && nstates[i + 1][0] == S_0)
                             {
                                 combinationSeen = true;
@@ -1349,10 +1537,44 @@ namespace LC4Statistics
 
 
                             }
-
+                            */
                             //continue with three known 
                         }
 
+                        
+
+                        //soundness:
+                        bool containsCorrect = false;
+                        MessageBox.Show(plausibleStates.Count.ToString());
+                        foreach (byte[] plausible in plausibleStates)
+                        {
+                            bool isCorrect = true;
+                            for(int k = 0; k < 36; k++)
+                            {
+                                //MessageBox.Show(((int)plausible[k]).ToString());
+                                if (plausible[k]!=255 && plausible[k] != nstates[i + 1][k])
+                                {
+                                    isCorrect = false;
+                                }
+                            }
+                            if (isCorrect)
+                            {
+                                containsCorrect = true;
+                                
+                            }
+                            
+                        }
+                        if (containsCorrect)
+                        {
+                            MessageBox.Show("yes");
+                        }
+                        else
+                        {
+                            File.AppendAllLines("kpa.txt", new string[] {"____________", "____________", LC4.BytesToString(nstates[i + 1]), "-----------------" });
+                            File.AppendAllLines("kpa.txt", plausibleStates.Select(x => LC4.BytesToString(x)));
+                            MessageBox.Show("nah");
+                        }
+                        /*
                         if (!combinationSeen)
                         {
                             MessageBox.Show("false");
@@ -1360,12 +1582,12 @@ namespace LC4Statistics
                         else
                         {
                             MessageBox.Show("true");
-                        }
+                        }*/
 
                     }
                     else if(ciphertext[i + 1] == 0)
                     {
-
+                        //...
                     }
                 }
             }
@@ -1378,6 +1600,14 @@ namespace LC4Statistics
         private void button18_Click(object sender, EventArgs e)
         {
             knownPlaintextAttack();
+        }
+    }
+
+    public static class EM
+    {
+        public static int[] FindAllIndexof<T>(this IEnumerable<T> values, T val)
+        {
+            return values.Select((b, i) => object.Equals(b, val) ? i : -1).Where(i => i != -1).ToArray();
         }
     }
 }
