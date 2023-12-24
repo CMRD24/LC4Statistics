@@ -1351,16 +1351,27 @@ namespace LC4Statistics
                             int post_s0_i2_position = (ciphertext[i+1]+startindex) % 6 + ((ciphertext[i+1] / 6 + startindex/6)%6) * 6;
 
 
+                            int post_cipherPosCol = cipherPosition%6;
+                            if (indexOfPlaintext / 6 == cipherPosition / 6)
+                            {
+                                post_cipherPosCol = (post_cipherPosCol+1)%6;
+                            }
+
+                            int post_plainPosRow = indexOfPlaintext / 6;
+                            if ((indexOfPlaintext % 6)+1 == cipherPosition % 6)
+                            {
+                                post_plainPosRow = (post_plainPosRow+1)%6;
+                            }
 
 
                             //-> take previous into account to make det. -1 or -7 or stays:
                             //plainrow = s0_i2_position row
                             int pre_s0_i2_position = post_s0_i2_position;
-                            if (cipherPosition % 6 == post_s0_i2_position % 6)
+                            if (post_cipherPosCol == post_s0_i2_position % 6)
                             {
                                 pre_s0_i2_position = pre_s0_i2_position % 6 + (((pre_s0_i2_position / 6) - 1) % 6) * 6;
                             }
-                            if ((int)(indexOfPlaintext/6) == (int)(pre_s0_i2_position / 6))
+                            if (post_plainPosRow == (int)(pre_s0_i2_position / 6))
                             {
                                 pre_s0_i2_position = (pre_s0_i2_position - 1)%6 + (pre_s0_i2_position / 6)*6;
                             }
@@ -1400,7 +1411,7 @@ namespace LC4Statistics
 
 
 
-                            for (byte i2 = 1; i2 < 36; i2++)
+                            for (byte s0i2val = 0; s0i2val < 36; s0i2val++)
                             {
                                 //copy to local state:
                                 byte[] rstate_b = new byte[36];
@@ -1408,7 +1419,7 @@ namespace LC4Statistics
 
                                 
                                 //take look at plaintext[i+2] and ciphertext[i+2]
-                                if(!setStateField(rstate_b, pre_s0_i2_position, i2))
+                                if(!setStateField(rstate_b, pre_s0_i2_position, s0i2val))
                                 {
                                     continue;
                                 }
@@ -1418,7 +1429,21 @@ namespace LC4Statistics
                                 {
                                     //calculate position of plaintext:
                                     int from = Array.IndexOf(rstate_b, plaintext[i + 2]);
-                                    int ct_pos = (from + i2) % 6 + (((from / 6 + i2 / 6)) % 6) * 6;
+                                    int ct_pos = (from + s0i2val) % 6 + (((from / 6 + s0i2val / 6)) % 6) * 6;
+
+                                    //sound?
+                                    if (rstate_a[0] == nstates[i + 1][0] && rstate_b[pre_s0_i2_position] == nstates[i + 1][pre_s0_i2_position])
+                                    {
+                                        if (nstates[i + 1][ct_pos] != ciphertext[i + 2])
+                                        {
+                                            MessageBox.Show("here!");
+                                        }
+                                        else
+                                        {
+                                            MessageBox.Show("clear!");
+                                        }
+                                    }
+
                                     /*if (rstate_b[ct_pos] != 255 && rstate_b[ct_pos] != ciphertext[i + 2])
                                     {
                                         continue;
@@ -1433,16 +1458,16 @@ namespace LC4Statistics
                                 }
                                 else if (Array.IndexOf(rstate_b, ciphertext[i + 2]) != -1)
                                 {
-                                    //calculate position of plaintext:
-                                    int from = Array.IndexOf(rstate_b, plaintext[i + 2]);
-                                    int ct_pos = (from - i2+6) % 6 + (((from / 6 - i2 / 6)+6) % 6) * 6;
-                                    
+                                    //calculate position of ciphertext:
+                                    int from = Array.IndexOf(rstate_b, ciphertext[i + 2]);
+                                    int ct_pos = (from - s0i2val+6) % 6 + (((from / 6 - s0i2val / 6)+6) % 6) * 6;
+                                    //MessageBox.Show("!!!" + ct_pos);
                                     /*if (rstate_b[ct_pos]!=255 && rstate_b[ct_pos] != ciphertext[i + 2])
                                     {
                                         continue;
                                     }
                                     rstate_b[ct_pos] = ciphertext[i + 2];*/
-                                    if (!setStateField(rstate_b, ct_pos, ciphertext[i + 2]))
+                                    if (!setStateField(rstate_b, ct_pos, plaintext[i + 2]))
                                     {
                                         continue;
                                     }
@@ -1462,7 +1487,7 @@ namespace LC4Statistics
                                         {
                                             continue;
                                         }
-                                        int ct_pos = (r + i2) % 6 + (((r / 6 + i2 / 6)) % 6) * 6;
+                                        int ct_pos = (r + s0i2val) % 6 + (((r / 6 + s0i2val / 6)) % 6) * 6;
                                         /*if (rstate_c[ct_pos] != 255 && rstate_c[ct_pos] != ciphertext[i + 2])
                                         {
                                             continue;
