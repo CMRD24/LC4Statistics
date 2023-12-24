@@ -1265,7 +1265,7 @@ namespace LC4Statistics
                     //second assumption: 0 at matrix position defined by ciphertext_i
                     int right = ciphertext[i] % 6;
                     int down = ciphertext[i] / 6;
-                    int linearNullIndex = (6 - right)%6 + 6*((6 - down)%6);
+                    int linearNullIndex = (12 - right)%6 + 6*((12 - down)%6);
                     bool assumption2 = nstates[i + 1][linearNullIndex] == 0;
                     if (!assumption2)
                     {
@@ -1338,12 +1338,19 @@ namespace LC4Statistics
                             //this is a guess because we are looking ate the pre-encryption state of i+1, the post-encryption
                             //state is dependant of plain and cipher positions in i+1 (plain[i+1]=0 at indexOfPlaintext, 
 
+                            int post_cipherPosCol = cipherPosition % 6;
+                            if (indexOfPlaintext / 6 == cipherPosition / 6)
+                            {
+                                post_cipherPosCol = (post_cipherPosCol + 1) % 6;
+                            }
+
+
                             int startindex = 0;
                             if (indexOfPlaintext / 6 == 0)
                             {
                                 startindex = 1;
                             }
-                            if(cipherPosition%6 == startindex)
+                            if(post_cipherPosCol == startindex)
                             {
                                 startindex += 6;
                             }
@@ -1351,17 +1358,9 @@ namespace LC4Statistics
                             int post_s0_i2_position = (ciphertext[i+1]+startindex) % 6 + ((ciphertext[i+1] / 6 + startindex/6)%6) * 6;
 
 
-                            int post_cipherPosCol = cipherPosition%6;
-                            if (indexOfPlaintext / 6 == cipherPosition / 6)
-                            {
-                                post_cipherPosCol = (post_cipherPosCol+1)%6;
-                            }
+                            
 
-                            int post_plainPosRow = indexOfPlaintext / 6;
-                            if ((indexOfPlaintext % 6)+1 == cipherPosition % 6)
-                            {
-                                post_plainPosRow = (post_plainPosRow+1)%6;
-                            }
+                            
 
 
                             //-> take previous into account to make det. -1 or -7 or stays:
@@ -1371,7 +1370,7 @@ namespace LC4Statistics
                             {
                                 pre_s0_i2_position = pre_s0_i2_position % 6 + (((pre_s0_i2_position / 6) - 1) % 6) * 6;
                             }
-                            if (post_plainPosRow == (int)(pre_s0_i2_position / 6))
+                            if (indexOfPlaintext / 6 == (int)(pre_s0_i2_position / 6))
                             {
                                 pre_s0_i2_position = (pre_s0_i2_position - 1)%6 + (pre_s0_i2_position / 6)*6;
                             }
@@ -1434,6 +1433,15 @@ namespace LC4Statistics
                                     //sound?
                                     if (rstate_a[0] == nstates[i + 1][0] && rstate_b[pre_s0_i2_position] == nstates[i + 1][pre_s0_i2_position])
                                     {
+                                        MessageBox.Show(
+                                            $"plain index: {from}" + Environment.NewLine +
+                                            $"s0i2val: {s0i2val}" + Environment.NewLine +
+                                            $"nstates[i+2][0]: {nstates[i + 2][0]}" + Environment.NewLine +
+                                            $"correct index: {Array.IndexOf(nstates[i+1], ciphertext[i+2])}"+Environment.NewLine+
+                                            $"calc. index: {ct_pos}" + Environment.NewLine
+                                            );
+
+
                                         if (nstates[i + 1][ct_pos] != ciphertext[i + 2])
                                         {
                                             MessageBox.Show("here!");
