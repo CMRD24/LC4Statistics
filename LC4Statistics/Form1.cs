@@ -1759,6 +1759,19 @@ namespace LC4Statistics
             return (byte)((from + s0) % 6 + ((from / 6 + s0 / 6) % 6) * 6);
         }
 
+        private byte getIndexReversed(byte from, byte s0)
+        {
+            return (byte)((from - s0 + 36) % 6 + ((from / 6 - s0 / 6 + 6) % 6) * 6);
+        }
+
+        private byte getS0FromIndexes(byte from, byte to)
+        {
+            //todo
+            int y_offset = ((to / 6) - (from / 6) + 6) % 6;
+            int x_offset = ((to % 6) - (from % 6) + 6) % 6;
+            return (byte)(y_offset * 6 + x_offset);
+        }
+
         private byte getIndex(byte from, byte right, byte down)
         {
             return (byte)((from + right) % 6 + ((from / 6 + down) % 6) * 6);
@@ -1826,10 +1839,8 @@ namespace LC4Statistics
             }
 
 
-            if(plaintextIndex!=255 && ciphertextIndex != 255)
-            {
 
-            }
+
             if (plaintextIndex != 255)
             {
                 if (knownState[0] != 255)
@@ -1850,8 +1861,24 @@ namespace LC4Statistics
                         return null;
                     }
                 }
+                else if (ciphertextIndex != 255)
+                {
+                    byte calculatedS0 = getS0FromIndexes(plaintextIndex, ciphertextIndex);
+                    if (setStateField(knownState, 0, calculatedS0))
+                    {
+                        //calculate new state:
+                        byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex, calculatedS0);
+                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1));
+                    }
+                    else
+                    {
+                        return null;
+                    }
+
+                }
                 else
                 {
+                    //guess s0
                     for(byte i = 0; i < 36; i++)
                     {
                         if (knownState.Contains(i))
@@ -1869,9 +1896,59 @@ namespace LC4Statistics
                     }
                 }
             }
-            else if (ciphertext)
+            else if (ciphertextIndex != 255)
             {
+                if (knownState[0] != 255)
+                {
+                    byte plainIndex = getIndexReversed((byte)ciphertextIndex, knownState[0]);
 
+                    if (setStateField(knownState, plainIndex, plaintext.First()))
+                    {
+                        //calculate new state:
+                        byte[] nextState = newState(knownState, plainIndex, ciphertextIndex, knownState[0]);
+                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1));
+                    }
+                    else
+                    {
+                        return null;
+                    }
+                }
+                else
+                {
+                    //todo (only ciphertextIndex known)
+                    //guess s0:
+                    for (byte i = 0; i < 36; i++)
+                    {
+                        if (knownState.Contains(i))
+                        {
+                            continue;
+                        }
+                        byte[] guessedState = new byte[36];
+                        Array.Copy(knownState, guessedState, 36);
+                        guessedState[0] = i;
+                        byte[] calcState = calculateKey(guessedState, plaintext, ciphertext, 255, ciphertextIndex);
+                        if (calcState != null)
+                        {
+                            return calcState;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                //nothing known
+                //guess index of plaintext:
+                foreach(byte p_index in EM.FindAllIndexof(knownState, (byte)255))
+                {
+                    byte[] guessedState = new byte[36];
+                    Array.Copy(knownState, guessedState, 36);
+                    guessedState[p_index] = plaintext.First();
+                    byte[] calcState = calculateKey(guessedState, plaintext, ciphertext, p_index, 255);
+                    if (calcState != null)
+                    {
+                        return calcState;
+                    }
+                }
             }
 
             
