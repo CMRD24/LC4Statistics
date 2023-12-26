@@ -1811,21 +1811,57 @@ namespace LC4Statistics
             return state;
         }
 
-        private byte[] newState(byte[] oldState, byte plaintextIndex, byte cipherIndex, byte s0value)
+        //value at cipherindex has to be set!!!
+        private byte[] newState(byte[] oldState, byte plaintextIndex, byte cipherIndex)
         {
             byte[] s1 = rotateRowRight(oldState, (byte)(plaintextIndex / 6));
-            byte[] s2 = rotateColumnDown(s1, (byte)(cipherIndex % 6));
-            return s0offset(s2, (byte)(s0value / 6), (byte)(s0value % 6));
+
+            
+
+            int columnToRotate = cipherIndex % 6;
+            if (cipherIndex / 6 == plaintextIndex / 6)
+            {
+                //moved
+                columnToRotate = (columnToRotate + 1) % 6;
+            }
+
+
+            byte[] s2 = rotateColumnDown(s1, (byte)columnToRotate);
+
+
+
+            //if s0 moved by rotations:
+            int additionalXOffset = 0;
+            int additionalYOffset = 0;
+            
+
+            if (plaintextIndex / 6 == 0 && cipherIndex % 6 == 1)
+            {
+                additionalXOffset = 1;
+                additionalYOffset = 1;
+            }
+            else if (plaintextIndex / 6 == 0)
+            {
+                additionalXOffset = 1;
+            }
+            else if (cipherIndex % 6 == 0)
+            {
+                additionalYOffset = 1;
+            }
+
+            return s0offset(s2, (byte)(((oldState[cipherIndex] / 6)+additionalYOffset)%6), (byte)(((oldState[cipherIndex] % 6)+additionalXOffset)%6));
         }
 
 
 
 
-        private byte[] calculateKey(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, byte plaintextIndex=255, byte ciphertextIndex=255)
+        private Tuple<byte[], int> calculateKey(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int advancement, byte plaintextIndex=255, byte ciphertextIndex=255)
         {
             if(Array.IndexOf(knownState, (byte)255)==-1)
             {
-                return knownState;
+
+                return Tuple.Create(knownState, advancement);
+
             }
 
             if (plaintextIndex == (byte)255)
@@ -1838,7 +1874,7 @@ namespace LC4Statistics
                 ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
             }
 
-
+            MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
 
 
             if (plaintextIndex != 255)
@@ -1846,18 +1882,22 @@ namespace LC4Statistics
                 if (knownState[0] != 255)
                 {
                     byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
+                    MessageBox.Show("calc.c.i.: " + cipherIndex);
                     if (ciphertextIndex != cipherIndex)
                     {
+                        //MessageBox.Show("f1");
                         return null;
                     }
                     if(setStateField(knownState, cipherIndex, ciphertext.First()))
                     {
                         //calculate new state:
-                        byte[] nextState = newState(knownState, plaintextIndex, cipherIndex, knownState[0]);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1));
+                        MessageBox.Show("cont1");
+                        byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
+                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement+1);
                     }
                     else
                     {
+                        //MessageBox.Show("f2");
                         return null;
                     }
                 }
@@ -1867,8 +1907,8 @@ namespace LC4Statistics
                     if (setStateField(knownState, 0, calculatedS0))
                     {
                         //calculate new state:
-                        byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex, calculatedS0);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1));
+                        byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex);
+                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement+1);
                     }
                     else
                     {
@@ -1888,12 +1928,13 @@ namespace LC4Statistics
                         byte[] guessedState = new byte[36];
                         Array.Copy(knownState, guessedState, 36);
                         guessedState[0] = i;
-                        byte[] calcState = calculateKey(guessedState, plaintext, ciphertext, plaintextIndex);
+                        var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, plaintextIndex);
                         if (calcState != null)
                         {
                             return calcState;
                         }
                     }
+                    return null;
                 }
             }
             else if (ciphertextIndex != 255)
@@ -1905,8 +1946,8 @@ namespace LC4Statistics
                     if (setStateField(knownState, plainIndex, plaintext.First()))
                     {
                         //calculate new state:
-                        byte[] nextState = newState(knownState, plainIndex, ciphertextIndex, knownState[0]);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1));
+                        byte[] nextState = newState(knownState, plainIndex, ciphertextIndex);
+                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement + 1);
                     }
                     else
                     {
@@ -1926,12 +1967,14 @@ namespace LC4Statistics
                         byte[] guessedState = new byte[36];
                         Array.Copy(knownState, guessedState, 36);
                         guessedState[0] = i;
-                        byte[] calcState = calculateKey(guessedState, plaintext, ciphertext, 255, ciphertextIndex);
+                        var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, 255, ciphertextIndex);
                         if (calcState != null)
                         {
                             return calcState;
                         }
+                        
                     }
+                    return null;
                 }
             }
             else
@@ -1943,12 +1986,13 @@ namespace LC4Statistics
                     byte[] guessedState = new byte[36];
                     Array.Copy(knownState, guessedState, 36);
                     guessedState[p_index] = plaintext.First();
-                    byte[] calcState = calculateKey(guessedState, plaintext, ciphertext, p_index, 255);
+                    var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, p_index, 255);
                     if (calcState != null)
                     {
                         return calcState;
                     }
                 }
+                return null;
             }
 
             
@@ -1958,6 +2002,76 @@ namespace LC4Statistics
         private void button18_Click(object sender, EventArgs e)
         {
             knownPlaintextAttack();
+        }
+
+        private string keyToSquareString(byte[] key)
+        {
+            string str = LC4.BytesToString(key);
+            return str.Substring(0, 6) + Environment.NewLine +
+                str.Substring(6, 6) + Environment.NewLine +
+                str.Substring(12, 6) + Environment.NewLine +
+                str.Substring(18, 6) + Environment.NewLine +
+                str.Substring(24, 6) + Environment.NewLine +
+                str.Substring(30, 6) + Environment.NewLine;
+        }
+
+        private void button19_Click(object sender, EventArgs e)
+        {
+            //test state function:
+
+
+
+            //generate key and plain+ciphertext:
+            byte[] key = GetRandomKey();
+            //File.AppendAllLines("tv.txt", new string[] { string.Join(",", key.Select(x => x.ToString())) });
+            byte[] coppiedKey = new byte[36];
+            Array.Copy(key, coppiedKey, 36);
+            byte[] plain = get36Rand(200);
+            byte[][] states = new byte[200][];
+            byte[] cipher = new byte[200];
+            LC4 lc4a = new LC4(key, 0, 0);
+
+            for(int i = 0; i < 200; i++)
+            {
+                states[i] = lc4a.GetNormalizedState();
+                cipher[i] = lc4a.SingleByteEncryption(plain[i]);
+                
+            }
+
+
+
+
+            int pli = Array.IndexOf(coppiedKey, plain[0]);
+            int cli = Array.IndexOf(coppiedKey, cipher[0]);
+            byte[] isState = newState(coppiedKey, (byte)pli, (byte)cli);
+
+
+            MessageBox.Show(keyToSquareString(states[1]) + Environment.NewLine + Environment.NewLine + keyToSquareString(isState));
+
+            MessageBox.Show($"pl: {LC4.ByteToChar(plain[0])}, ci: {LC4.ByteToChar(cipher[0])}" + Environment.NewLine + Environment.NewLine + keyToSquareString(key) + Environment.NewLine + "_________is:" + Environment.NewLine + keyToSquareString(isState) + Environment.NewLine + "_________supp" + Environment.NewLine + keyToSquareString(states[1]));
+            
+
+
+            //delete n parts of key:
+
+            /*for(int i = 35; i > 34; i--)
+            {
+                key[i] = 255;
+            }*/
+            key[35] = 255;
+
+            //recover key:
+            var recovered = calculateKey(key, plain, cipher, 0);
+
+            if (recovered == null)
+            {
+                MessageBox.Show("fail!");
+                return;
+            }
+
+            MessageBox.Show($"{LC4.BytesToString(states[recovered.Item2])}   (key ({recovered.Item2}))" + Environment.NewLine +
+                $"{LC4.BytesToString(recovered.Item1)}   (rec)");
+
         }
     }
 
