@@ -1811,7 +1811,13 @@ namespace LC4Statistics
             return state;
         }
 
-        //value at cipherindex has to be set!!!
+        /// <summary>
+        /// value at cipherindex has to be set!!!
+        /// </summary>
+        /// <param name="oldState"></param>
+        /// <param name="plaintextIndex"></param>
+        /// <param name="cipherIndex"></param>
+        /// <returns></returns>
         private byte[] newState(byte[] oldState, byte plaintextIndex, byte cipherIndex)
         {
             byte[] s1 = rotateRowRight(oldState, (byte)(plaintextIndex / 6));
@@ -1844,7 +1850,7 @@ namespace LC4Statistics
             {
                 additionalXOffset = 1;
             }
-            else if (cipherIndex % 6 == 0)
+            else if (columnToRotate % 6 == 0)
             {
                 additionalYOffset = 1;
             }
@@ -1874,7 +1880,7 @@ namespace LC4Statistics
                 ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
             }
 
-            MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
+            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
 
 
             if (plaintextIndex != 255)
@@ -1882,8 +1888,8 @@ namespace LC4Statistics
                 if (knownState[0] != 255)
                 {
                     byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    MessageBox.Show("calc.c.i.: " + cipherIndex);
-                    if (ciphertextIndex != cipherIndex)
+                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
+                    if (ciphertextIndex !=255 && ciphertextIndex != cipherIndex)
                     {
                         //MessageBox.Show("f1");
                         return null;
@@ -1891,7 +1897,7 @@ namespace LC4Statistics
                     if(setStateField(knownState, cipherIndex, ciphertext.First()))
                     {
                         //calculate new state:
-                        MessageBox.Show("cont1");
+                        //MessageBox.Show("cont1");
                         byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
                         return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement+1);
                     }
@@ -1918,6 +1924,7 @@ namespace LC4Statistics
                 }
                 else
                 {
+                    //MessageBox.Show("guess s0");
                     //guess s0
                     for(byte i = 0; i < 36; i++)
                     {
@@ -1958,6 +1965,7 @@ namespace LC4Statistics
                 {
                     //todo (only ciphertextIndex known)
                     //guess s0:
+                    //MessageBox.Show("guess s0");
                     for (byte i = 0; i < 36; i++)
                     {
                         if (knownState.Contains(i))
@@ -1979,6 +1987,7 @@ namespace LC4Statistics
             }
             else
             {
+                //MessageBox.Show("guess index of plaintext");
                 //nothing known
                 //guess index of plaintext:
                 foreach(byte p_index in EM.FindAllIndexof(knownState, (byte)255))
@@ -2059,6 +2068,35 @@ namespace LC4Statistics
                 key[i] = 255;
             }*/
             key[35] = 255;
+            key[34] = 255;
+            key[33] = 255;
+            key[32] = 255;
+            key[31] = 255;
+            key[30] = 255;
+            key[29] = 255;
+            key[28] = 255;
+            key[27] = 255;
+            key[26] = 255;
+            key[25] = 255;
+            key[24] = 255;
+            key[23] = 255;
+            key[22] = 255;
+            key[21] = 255;
+            key[20] = 255;
+            key[19] = 255;
+            key[18] = 255;
+            key[17] = 255;
+            key[16] = 255;
+            key[15] = 255;
+            key[14] = 255;
+            key[13] = 255;
+            key[12] = 255;
+            key[11] = 255;
+            key[10] = 255;
+            key[9] = 255;
+            key[8] = 255;
+            key[7] = 255;
+            key[6] = 255;
 
             //recover key:
             var recovered = calculateKey(key, plain, cipher, 0);
