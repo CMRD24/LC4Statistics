@@ -2263,11 +2263,24 @@ namespace LC4Statistics
             MessageBox.Show("passed");
         }
 
+        private bool containsAny(IEnumerable<byte> array, byte[] values)
+        {
+            foreach(byte b in values)
+            {
+                if (array.Contains(b))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private void button19_Click(object sender, EventArgs e)
         {
             //test state function:
-            testStateFunction();
+            //testStateFunction();
             int msgLength = 20000;
+            int numberOfUnknowns = 33;
 
             //generate key and plain+ciphertext:
             byte[] key = GetRandomKey();
@@ -2301,37 +2314,118 @@ namespace LC4Statistics
 
 
             //delete n parts of key:
-            removeNofKey(key, 27);
+            //removeNofKey(key, 27);
             
 
             //recover key:
 
             //get promising index:
-            int bestIndex = 0;
-            int bestValue = 20;
+            
+            List<Tuple<int, int>> prIndexes = new List<Tuple<int, int>>();
             for(int i = 0; i < msgLength - 100; i++)
             {
                 List<byte> pool = new List<byte>();
-                pool.AddRange(plain.Skip(i).Take(10));
-                pool.AddRange(cipher.Skip(i).Take(10));
-                int msgD = pool.Distinct().Count();
-                if (msgD < bestValue)
+                var pl = plain.Skip(i).Take(10).ToArray();
+                var ci = cipher.Skip(i).Take(10).ToArray();
+                int score = 0;
+                if (pl[0] == ci[0])
                 {
-                    bestValue = msgD;
-                    bestIndex = i;
+                    score++;
+                    if (pl[1]==0 || ci[1] == 0)
+                    {
+                        score++;
+                        var z = pl.Take(2).Concat(ci.Take(2));
+                        if(containsAny(z, new byte[] { pl[2], ci[2] }))
+                        {
+                            score++;
+                            var z3 = pl.Take(3).Concat(ci.Take(3));
+                            if (containsAny(z3, new byte[] { pl[3], ci[3] }))
+                            {
+                                score++;
+                                var z4 = pl.Take(4).Concat(ci.Take(4));
+                                if (containsAny(z4, new byte[] { pl[4], ci[4] }))
+                                {
+                                    score++;
+                                }
+                            }
+                        }
+                    }
                 }
+                pool.AddRange(pl);
+                pool.AddRange(ci);
+                int msgD = pool.Distinct().Count();
+                score += 20 - msgD;
+                prIndexes.Add(Tuple.Create(i, score));
             }
+
+            var sortedIndexes = prIndexes.OrderByDescending(x => x.Item2).Take(1000);
+            MessageBox.Show("!"+sortedIndexes.First().Item2);
+            List<Tuple<int, int>> prIndexes2 = new List<Tuple<int, int>>();
+            for (int i = 0; i < 1000; i++)
+            {
+                int pindex = sortedIndexes.ElementAt(i).Item1;
+                byte[] ck = new byte[36]; 
+                Array.Copy(states[pindex], ck, 36);
+                //dont forget to change later
+                ck = removeNofKey(ck, numberOfUnknowns);
+                byte[] cpl = plain.Skip(pindex).ToArray();
+                byte[] cci = cipher.Skip(pindex).ToArray();
+                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 2).Count;
+                prIndexes2.Add(Tuple.Create(pindex, possibilitiesAtIndex));
+                //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
+                
+            }
+            var sortedIndexes2 = prIndexes2.OrderBy(x => x.Item2).Take(100);
+            MessageBox.Show("!" + sortedIndexes2.First().Item2);
+            List<Tuple<int, int>> prIndexes3 = new List<Tuple<int, int>>();
+            for (int i = 0; i < 100; i++)
+            {
+                int pindex = sortedIndexes2.ElementAt(i).Item1;
+                byte[] ck = new byte[36];
+                Array.Copy(states[pindex], ck, 36);
+                //dont forget to change later
+                ck = removeNofKey(ck, numberOfUnknowns);
+                byte[] cpl = plain.Skip(pindex).ToArray();
+                byte[] cci = cipher.Skip(pindex).ToArray();
+                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 3).Count;
+                prIndexes3.Add(Tuple.Create(pindex, possibilitiesAtIndex));
+                //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
+
+            }
+
+            var sortedIndexes3 = prIndexes3.OrderBy(x => x.Item2).Take(10);
+            MessageBox.Show("!" + sortedIndexes3.First().Item2);
+            List<Tuple<int, int>> prIndexes4 = new List<Tuple<int, int>>();
+            for (int i = 0; i < 10; i++)
+            {
+                int pindex = sortedIndexes3.ElementAt(i).Item1;
+                byte[] ck = new byte[36];
+                Array.Copy(states[pindex], ck, 36);
+                //dont forget to change later
+                ck = removeNofKey(ck, numberOfUnknowns);
+                byte[] cpl = plain.Skip(pindex).ToArray();
+                byte[] cci = cipher.Skip(pindex).ToArray();
+                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 5).Count;
+                prIndexes4.Add(Tuple.Create(pindex, possibilitiesAtIndex));
+                MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
+
+            }
+            var sortedIndexes4 = prIndexes4.OrderBy(x => x.Item2).Take(10);
+            int bestIndex = sortedIndexes4.First().Item1;
+            int bestValue = sortedIndexes4.First().Item2;
 
             MessageBox.Show($"bestI: {bestIndex}; bestValue: {bestValue}");
 
             int index = bestIndex;// getBestIndexForBacktracking(key, plain, cipher);
 
             byte[] chosenKey = states[index];
-            chosenKey = removeNofKey(chosenKey, 29);
+            chosenKey = removeNofKey(chosenKey, numberOfUnknowns);
             byte[] chosenPlain = plain.Skip(index).ToArray();
             byte[] chosenCipher = cipher.Skip(index).ToArray();
 
-            int d = 10;
+            MessageBox.Show(LC4.BytesToString(chosenPlain.Take(10).ToArray()) + Environment.NewLine + LC4.BytesToString(chosenCipher.Take(10).ToArray()));
+
+            int d = 5;
             var test = calculateKeyPossibilities(chosenKey, chosenPlain.Skip(0), chosenCipher.Skip(0), d);
             MessageBox.Show(test.Count.ToString());
             /*bool contains = false;
