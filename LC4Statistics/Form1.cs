@@ -1754,426 +1754,8 @@ namespace LC4Statistics
         }
 
 
-        private byte getIndex(byte from, byte s0)
-        {
-            return (byte)((from + s0) % 6 + ((from / 6 + s0 / 6) % 6) * 6);
-        }
 
-        private byte getIndexReversed(byte from, byte s0)
-        {
-            return (byte)((from - s0 + 36) % 6 + ((from / 6 - s0 / 6 + 6) % 6) * 6);
-        }
-
-        private byte getS0FromIndexes(byte from, byte to)
-        {
-            //todo
-            int y_offset = ((to / 6) - (from / 6) + 6) % 6;
-            int x_offset = ((to % 6) - (from % 6) + 6) % 6;
-            return (byte)(y_offset * 6 + x_offset);
-        }
-
-        private byte getIndex(byte from, byte right, byte down)
-        {
-            return (byte)((from + right) % 6 + ((from / 6 + down) % 6) * 6);
-        }
-
-        private byte[] rotateRowRight(byte[] state, byte row)
-        {
-            byte[] result = new byte[36];
-            Array.Copy(state, result, 36);
-            for (byte i = 0; i < 6; i++)
-            {
-                result[6 * row + i] = state[6 * row + ((i + 5) % 6)];
-
-            }
-            return result;
-        }
-
-        private byte[] rotateColumnDown(byte[] state, byte column)
-        {
-            byte[] result = new byte[36];
-            Array.Copy(state, result, 36);
-            for (byte i = 0; i < 6; i++)
-            {
-                result[6 * i + column] = state[mod(6 * i + column - 6, 36)];
-
-            }
-            return result;
-        }
-
-        private byte[] s0offset(byte[] oldState, byte down, byte right)
-        {
-            byte[] state = new byte[36];
-            for(byte i = 0; i < 36; i++)
-            {
-                state[i] = oldState[getIndex(i, right, down)];
-            }
-            return state;
-        }
-
-        /// <summary>
-        /// value at cipherindex has to be set!!!
-        /// </summary>
-        /// <param name="oldState"></param>
-        /// <param name="plaintextIndex"></param>
-        /// <param name="cipherIndex"></param>
-        /// <returns></returns>
-        private byte[] newState(byte[] oldState, byte plaintextIndex, byte cipherIndex)
-        {
-            byte[] s1 = rotateRowRight(oldState, (byte)(plaintextIndex / 6));
-
-            
-
-            int columnToRotate = cipherIndex % 6;
-            if (cipherIndex / 6 == plaintextIndex / 6)
-            {
-                //moved
-                columnToRotate = (columnToRotate + 1) % 6;
-            }
-
-
-            byte[] s2 = rotateColumnDown(s1, (byte)columnToRotate);
-
-
-
-            //if s0 moved by rotations:
-            int additionalXOffset = 0;
-            int additionalYOffset = 0;
-            
-
-            if (plaintextIndex / 6 == 0 && ((cipherIndex/6!=0 && cipherIndex % 6 == 1) || (cipherIndex/6==0&&cipherIndex%6==0)))
-            {
-                additionalXOffset = 1;
-                additionalYOffset = 1;
-            }
-            else if (plaintextIndex / 6 == 0)
-            {
-                additionalXOffset = 1;
-            }
-            else if (columnToRotate % 6 == 0)
-            {
-                additionalYOffset = 1;
-            }
-
-            return s0offset(s2, (byte)(((oldState[cipherIndex] / 6)+additionalYOffset)%6), (byte)(((oldState[cipherIndex] % 6)+additionalXOffset)%6));
-        }
-
-
-        private List<byte[]> calculateKeyPossibilities(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int depth, byte plaintextIndex = 255, byte ciphertextIndex = 255)
-        {
-            List<byte[]> possibilities = new List<byte[]>();
-            if (!knownState.Contains((byte)255))
-            {
-                possibilities.Add(knownState);
-                return possibilities;
-
-            }
-            /*var unknownFields = EM.FindAllIndexof(knownState, (byte)255);
-            if (unknownFields.Length == 1)
-            {
-                //which value is missing?
-                for(byte i = 0; i < 36; i++)
-                {
-                    if (!knownState.Contains(i))
-                    {
-                        knownState[unknownFields[0]] = i;
-                        return Tuple.Create(knownState, advancement);
-                    }
-                }
-            }*/
-
-            //temp value
-            if (depth == 0)
-            {
-                possibilities.Add(knownState);
-                return possibilities;
-            }
-
-            if (plaintextIndex == (byte)255)
-            {
-                plaintextIndex = (byte)Array.IndexOf(knownState, plaintext.First());
-            }
-
-            if (ciphertextIndex == (byte)255)
-            {
-                ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
-            }
-
-            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
-
-
-            if (plaintextIndex != 255)
-            {
-                if (knownState[0] != 255)
-                {
-                    byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
-                    if (ciphertextIndex != 255 && ciphertextIndex != cipherIndex)
-                    {
-                        //MessageBox.Show("f1");
-                        return null;
-                    }
-                    if (setStateField(knownState, cipherIndex, ciphertext.First()))
-                    {
-                        //calculate new state:
-                        //MessageBox.Show("cont1");
-                        byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
-                        return calculateKeyPossibilities(nextState, plaintext.Skip(1), ciphertext.Skip(1), depth - 1);
-                    }
-                    else
-                    {
-                        //MessageBox.Show("f2");
-                        return null;
-                    }
-                }
-                else if (ciphertextIndex != 255)
-                {
-                    byte calculatedS0 = getS0FromIndexes(plaintextIndex, ciphertextIndex);
-                    if (setStateField(knownState, 0, calculatedS0))
-                    {
-                        //calculate new state:
-                        byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex);
-                        return calculateKeyPossibilities(nextState, plaintext.Skip(1), ciphertext.Skip(1), depth - 1);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-
-                }
-                else
-                {
-                    //MessageBox.Show("guess s0");
-                    //guess s0
-                    for (byte i = 0; i < 36; i++)
-                    {
-                        if (knownState.Contains(i))
-                        {
-                            continue;
-                        }
-                        byte[] guessedState = new byte[36];
-                        Array.Copy(knownState, guessedState, 36);
-                        guessedState[0] = i;
-                        var calcState = calculateKeyPossibilities(guessedState, plaintext, ciphertext, depth, plaintextIndex);
-                        if (calcState != null)
-                        {
-                            possibilities.AddRange(calcState);
-                        }
-                    }
-                    return possibilities;
-                }
-            }
-            else if (ciphertextIndex != 255)
-            {
-                if (knownState[0] != 255)
-                {
-                    byte plainIndex = getIndexReversed((byte)ciphertextIndex, knownState[0]);
-
-                    if (setStateField(knownState, plainIndex, plaintext.First()))
-                    {
-                        //calculate new state:
-                        byte[] nextState = newState(knownState, plainIndex, ciphertextIndex);
-                        return calculateKeyPossibilities(nextState, plaintext.Skip(1), ciphertext.Skip(1), depth - 1);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-                }
-                else
-                {
-                    //todo (only ciphertextIndex known)
-                    //guess s0:
-                    //MessageBox.Show("guess s0");
-                    for (byte i = 0; i < 36; i++)
-                    {
-                        if (knownState.Contains(i))
-                        {
-                            continue;
-                        }
-                        byte[] guessedState = new byte[36];
-                        Array.Copy(knownState, guessedState, 36);
-                        guessedState[0] = i;
-                        var calcState = calculateKeyPossibilities(guessedState, plaintext, ciphertext, depth, 255, ciphertextIndex);
-                        if (calcState != null)
-                        {
-                            possibilities.AddRange(calcState);
-                        }
-
-                    }
-                    return possibilities;
-                }
-            }
-            else
-            {
-                //MessageBox.Show("guess index of plaintext");
-                //nothing known
-                //guess index of plaintext:
-                foreach (byte p_index in EM.FindAllIndexof(knownState, (byte)255))
-                {
-                    byte[] guessedState = new byte[36];
-                    Array.Copy(knownState, guessedState, 36);
-                    guessedState[p_index] = plaintext.First();
-                    var calcState = calculateKeyPossibilities(guessedState, plaintext, ciphertext, depth, p_index, 255);
-                    if (calcState != null)
-                    {
-                        possibilities.AddRange(calcState);
-                    }
-                }
-                //MessageBox.Show("r3:"+possibilities.Count);
-                return possibilities;
-            }
-
-
-        }
-
-
-        private Tuple<byte[], int> calculateKey(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int advancement, byte plaintextIndex=255, byte ciphertextIndex=255)
-        {
-            if(!knownState.Contains((byte)255))
-            {
-
-                return Tuple.Create(knownState, advancement);
-
-            }
-            
-
-            if (plaintextIndex == (byte)255)
-            {
-                plaintextIndex = (byte)Array.IndexOf(knownState, plaintext.First());
-            }
-
-            if (ciphertextIndex == (byte)255)
-            {
-                ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
-            }
-
-            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
-
-
-            if (plaintextIndex != 255)
-            {
-                if (knownState[0] != 255)
-                {
-                    byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
-                    if (ciphertextIndex !=255 && ciphertextIndex != cipherIndex)
-                    {
-                        //MessageBox.Show("f1");
-                        return null;
-                    }
-                    if(setStateField(knownState, cipherIndex, ciphertext.First()))
-                    {
-                        //calculate new state:
-                        //MessageBox.Show("cont1");
-                        byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement+1);
-                    }
-                    else
-                    {
-                        //MessageBox.Show("f2");
-                        return null;
-                    }
-                }
-                else if (ciphertextIndex != 255)
-                {
-                    byte calculatedS0 = getS0FromIndexes(plaintextIndex, ciphertextIndex);
-                    if (setStateField(knownState, 0, calculatedS0))
-                    {
-                        //calculate new state:
-                        byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement+1);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-
-                }
-                else
-                {
-                    //MessageBox.Show("guess s0");
-                    //guess s0
-                    for(byte i = 0; i < 36; i++)
-                    {
-                        if (knownState.Contains(i))
-                        {
-                            continue;
-                        }
-                        byte[] guessedState = new byte[36];
-                        Array.Copy(knownState, guessedState, 36);
-                        guessedState[0] = i;
-                        var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, plaintextIndex);
-                        if (calcState != null)
-                        {
-                            return calcState;
-                        }
-                    }
-                    return null;
-                }
-            }
-            else if (ciphertextIndex != 255)
-            {
-                if (knownState[0] != 255)
-                {
-                    byte plainIndex = getIndexReversed((byte)ciphertextIndex, knownState[0]);
-
-                    if (setStateField(knownState, plainIndex, plaintext.First()))
-                    {
-                        //calculate new state:
-                        byte[] nextState = newState(knownState, plainIndex, ciphertextIndex);
-                        return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement + 1);
-                    }
-                    else
-                    {
-                        return null;
-                    }
-                }
-                else
-                {
-                    //todo (only ciphertextIndex known)
-                    //guess s0:
-                    //MessageBox.Show("guess s0");
-                    for (byte i = 0; i < 36; i++)
-                    {
-                        if (knownState.Contains(i))
-                        {
-                            continue;
-                        }
-                        byte[] guessedState = new byte[36];
-                        Array.Copy(knownState, guessedState, 36);
-                        guessedState[0] = i;
-                        var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, 255, ciphertextIndex);
-                        if (calcState != null)
-                        {
-                            return calcState;
-                        }
-                        
-                    }
-                    return null;
-                }
-            }
-            else
-            {
-                //MessageBox.Show("guess index of plaintext");
-                //nothing known
-                //guess index of plaintext:
-                foreach(byte p_index in EM.FindAllIndexof(knownState, (byte)255))
-                {
-                    byte[] guessedState = new byte[36];
-                    Array.Copy(knownState, guessedState, 36);
-                    guessedState[p_index] = plaintext.First();
-                    var calcState = calculateKey(guessedState, plaintext, ciphertext, advancement, p_index, 255);
-                    if (calcState != null)
-                    {
-                        return calcState;
-                    }
-                }
-                return null;
-            }
-
-            
-        }
+        
 
 
         private void button18_Click(object sender, EventArgs e)
@@ -2240,10 +1822,10 @@ namespace LC4Statistics
             return true;
         }
 
-
+        /*
         private void testStateFunction()
         {
-            for(int i = 0; i < 10000; i++)
+            for (int i = 0; i < 10000; i++)
             {
                 byte[] key = GetRandomKey();
                 LC4 lc4 = new LC4(key, 0, 0);
@@ -2258,10 +1840,11 @@ namespace LC4Statistics
                     MessageBox.Show($"##pl: {LC4.ByteToChar(data[0])}, ci: {LC4.ByteToChar(c)}" + Environment.NewLine + Environment.NewLine + keyToSquareString(key) + Environment.NewLine + "_________is:" + Environment.NewLine + keyToSquareString(isState) + Environment.NewLine + "_________supp" + Environment.NewLine + keyToSquareString(supposed));
 
                 }
-                
+
             }
             MessageBox.Show("passed");
-        }
+        }*/
+
 
         private bool containsAny(IEnumerable<byte> array, byte[] values)
         {
@@ -2277,10 +1860,11 @@ namespace LC4Statistics
 
         private void button19_Click(object sender, EventArgs e)
         {
+            Thread t = new Thread(new ThreadStart(() => { 
             //test state function:
             //testStateFunction();
             int msgLength = 20000;
-            int numberOfUnknowns = 33;
+            int numberOfUnknowns = 31;
 
             //generate key and plain+ciphertext:
             byte[] key = GetRandomKey();
@@ -2304,22 +1888,24 @@ namespace LC4Statistics
 
             int pli = Array.IndexOf(coppiedKey, plain[0]);
             int cli = Array.IndexOf(coppiedKey, cipher[0]);
-            byte[] isState = newState(coppiedKey, (byte)pli, (byte)cli);
+                //byte[] isState = newState(coppiedKey, (byte)pli, (byte)cli);
 
 
-            //MessageBox.Show(keyToSquareString(states[1]) + Environment.NewLine + Environment.NewLine + keyToSquareString(isState));
+                //MessageBox.Show(keyToSquareString(states[1]) + Environment.NewLine + Environment.NewLine + keyToSquareString(isState));
 
-            //MessageBox.Show($"pl: {LC4.ByteToChar(plain[0])}, ci: {LC4.ByteToChar(cipher[0])}" + Environment.NewLine + Environment.NewLine + keyToSquareString(key) + Environment.NewLine + "_________is:" + Environment.NewLine + keyToSquareString(isState) + Environment.NewLine + "_________supp" + Environment.NewLine + keyToSquareString(states[1]));
+                //MessageBox.Show($"pl: {LC4.ByteToChar(plain[0])}, ci: {LC4.ByteToChar(cipher[0])}" + Environment.NewLine + Environment.NewLine + keyToSquareString(key) + Environment.NewLine + "_________is:" + Environment.NewLine + keyToSquareString(isState) + Environment.NewLine + "_________supp" + Environment.NewLine + keyToSquareString(states[1]));
 
 
 
-            //delete n parts of key:
-            //removeNofKey(key, 27);
-            
+                //delete n parts of key:
+                //removeNofKey(key, 27);
 
-            //recover key:
 
-            //get promising index:
+                //recover key:
+
+                //get promising index:
+
+                Backtracking backtracking = new Backtracking();
             
             List<Tuple<int, int>> prIndexes = new List<Tuple<int, int>>();
             for(int i = 0; i < msgLength - 100; i++)
@@ -2370,8 +1956,11 @@ namespace LC4Statistics
                 ck = removeNofKey(ck, numberOfUnknowns);
                 byte[] cpl = plain.Skip(pindex).ToArray();
                 byte[] cci = cipher.Skip(pindex).ToArray();
-                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 2).Count;
+                int possibilitiesAtIndex = backtracking.calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 2).Count;
                 prIndexes2.Add(Tuple.Create(pindex, possibilitiesAtIndex));
+                    label3.Invoke(new Action(() => {
+                        label3.Text = $"c2({i}): "+ pindex + ":" + possibilitiesAtIndex;
+                    }));
                 //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
                 
             }
@@ -2387,11 +1976,14 @@ namespace LC4Statistics
                 ck = removeNofKey(ck, numberOfUnknowns);
                 byte[] cpl = plain.Skip(pindex).ToArray();
                 byte[] cci = cipher.Skip(pindex).ToArray();
-                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 3).Count;
+                int possibilitiesAtIndex = backtracking.calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 3).Count;
                 prIndexes3.Add(Tuple.Create(pindex, possibilitiesAtIndex));
-                //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
+                    label3.Invoke(new Action(() => {
+                        label3.Text = $"c3({i}): " + pindex + ":" + possibilitiesAtIndex;
+                    }));
+                    //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
 
-            }
+                }
 
             var sortedIndexes3 = prIndexes3.OrderBy(x => x.Item2).Take(10);
             MessageBox.Show("!" + sortedIndexes3.First().Item2);
@@ -2405,11 +1997,14 @@ namespace LC4Statistics
                 ck = removeNofKey(ck, numberOfUnknowns);
                 byte[] cpl = plain.Skip(pindex).ToArray();
                 byte[] cci = cipher.Skip(pindex).ToArray();
-                int possibilitiesAtIndex = calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 5).Count;
+                int possibilitiesAtIndex = backtracking.calculateKeyPossibilities(ck, cpl.Skip(0), cci.Skip(0), 5).Count;
                 prIndexes4.Add(Tuple.Create(pindex, possibilitiesAtIndex));
-                MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
+                    label3.Invoke(new Action(() => {
+                        label3.Text = $"c5({i}): " + pindex + ":" + possibilitiesAtIndex;
+                    }));
+                    //MessageBox.Show(pindex + ":" + possibilitiesAtIndex);
 
-            }
+                }
             var sortedIndexes4 = prIndexes4.OrderBy(x => x.Item2).Take(10);
             int bestIndex = sortedIndexes4.First().Item1;
             int bestValue = sortedIndexes4.First().Item2;
@@ -2425,8 +2020,8 @@ namespace LC4Statistics
 
             MessageBox.Show(LC4.BytesToString(chosenPlain.Take(10).ToArray()) + Environment.NewLine + LC4.BytesToString(chosenCipher.Take(10).ToArray()));
 
-            int d = 5;
-            var test = calculateKeyPossibilities(chosenKey, chosenPlain.Skip(0), chosenCipher.Skip(0), d);
+            int d = 8;
+            var test = backtracking.calculateKeyPossibilities(chosenKey, chosenPlain.Skip(0), chosenCipher.Skip(0), d);
             MessageBox.Show(test.Count.ToString());
             /*bool contains = false;
             foreach (byte[] pattern in test)
@@ -2441,7 +2036,7 @@ namespace LC4Statistics
 
            
 
-            var recovered = calculateKey(chosenKey, chosenPlain.Skip(0), chosenCipher.Skip(0), 0);
+            var recovered = backtracking.calculateKey(chosenKey, chosenPlain.Skip(0), chosenCipher.Skip(0), 0);
 
             if (recovered == null)
             {
@@ -2451,6 +2046,166 @@ namespace LC4Statistics
 
             MessageBox.Show($"{LC4.BytesToString(states[recovered.Item2+index])}   (key ({recovered.Item2}))" + Environment.NewLine +
                 $"{LC4.BytesToString(recovered.Item1)}   (rec)");
+            }));
+            t.Start();
+
+        }
+
+        int getPromisingIndex(IEnumerable<byte> plain, IEnumerable<byte> cipher)
+        {
+            List<Tuple<int, int>> prIndexes = new List<Tuple<int, int>>();
+            for (int i = 0; i < plain.Count() - 100; i++)
+            {
+                List<byte> pool = new List<byte>();
+                var pl = plain.Skip(i).Take(10).ToArray();
+                var ci = cipher.Skip(i).Take(10).ToArray();
+                int score = 0;
+                if (ci[0]==0 && ci[1]==0 && ci[2] == 0)
+                {
+                    score += 5;
+                }
+                if (pl[0] == ci[0])
+                {
+                    score++;
+                    if (pl[1] == 0 || ci[1] == 0)
+                    {
+                        score++;
+                        var z = pl.Take(2).Concat(ci.Take(2));
+                        if (containsAny(z, new byte[] { pl[2], ci[2] }))
+                        {
+                            score++;
+                            var z3 = pl.Take(3).Concat(ci.Take(3));
+                            if (containsAny(z3, new byte[] { pl[3], ci[3] }))
+                            {
+                                score++;
+                                var z4 = pl.Take(4).Concat(ci.Take(4));
+                                if (containsAny(z4, new byte[] { pl[4], ci[4] }))
+                                {
+                                    score++;
+                                    var z5 = pl.Take(5).Concat(ci.Take(5));
+                                    if (containsAny(z5, new byte[] { pl[5], ci[5] }))
+                                    {
+                                        score++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                //pool.AddRange(pl);
+                //pool.AddRange(ci);
+                //int msgD = pool.Distinct().Count();
+                //score += 20 - msgD;
+                prIndexes.Add(Tuple.Create(i, score));
+            }
+            return prIndexes.OrderByDescending(x => x.Item2).First().Item1;
+        }
+
+        private void button20_Click(object sender, EventArgs e)
+        {
+            int upTo = 28;
+            int repetitions = 20;
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "avg";
+            ser2.BorderWidth = 2;
+
+            ser2.ChartType = SeriesChartType.Line;
+            chart1.Series.Add(ser2);
+
+            chart1.ChartAreas[0].AxisY.Minimum = 0;
+
+            Thread t = new Thread(new ThreadStart(()=>{
+                List<int[]> collisions = new List<int[]>();
+                for (int k = 0; k < repetitions; k++)
+                {
+                    var key0 = GetRandomKey();
+                    LC4 lc4a = new LC4(key0, 0, 0);
+                    int msgLength = 500000;
+                    byte[] data0 = get36Rand(msgLength);//new byte[msgLength]; //get36Rand(msgLength);
+                                                        // for(int k = 0; k < msgLength; k++) { data0[k] = 0; }
+                    byte[][] states = new byte[msgLength][];
+                    byte[] cipher0 = new byte[msgLength];
+
+                    for (int i = 0; i < msgLength; i++)
+                    {
+                        states[i] = lc4a.GetNormalizedState();
+                        cipher0[i] = lc4a.SingleByteEncryption(data0[i]);
+
+                    }
+                    //MessageBox.Show("search index...");
+                    //get promising index:
+                    int index = 0;//getPromisingIndex(data0, cipher0);
+                    var data = data0.Skip(index).ToArray();
+                    var cipher = cipher0.Skip(index).ToArray();
+                    var key = states[index];
+                    //MessageBox.Show(LC4.BytesToString(data.Take(10).ToArray()) + Environment.NewLine + LC4.BytesToString(cipher.Take(10).ToArray()));
+                    Backtracking backtracking = new Backtracking();
+
+                    int[] coll = new int[upTo+1];
+
+                    for (int i = 5; i <= upTo; i++)
+                    {
+                        byte[] partialKey = new byte[36];
+                        Array.Copy(key, partialKey, 36);
+
+                        partialKey = removeNofKey(partialKey, i);
+                        backtracking.ResetCollisions();
+                        backtracking.calculateKey(partialKey, data, cipher, 0);
+                        if (backtracking.Collisions > 0)
+                        {
+                            double log2 = Math.Log(backtracking.Collisions, 2);
+                           
+                            //MessageBox.Show(backtracking.Collisions.ToString());
+                            chart1.Invoke(new Action(() => {
+                                chart1.Series[0].Points.AddXY(i, log2);
+                            }));
+                        }
+                        coll[i] = backtracking.Collisions;
+
+                        label3.Invoke(new Action(() =>
+                        {
+                            label3.Text = i.ToString();
+                        }));
+                        if (i == 33)
+                        {
+                            //show result:
+                            //todo
+                        }
+                    }
+                    collisions.Add(coll);
+                    //MessageBox.Show(LC4.BytesToString(data.Take(10).ToArray()) + Environment.NewLine + LC4.BytesToString(cipher.Take(10).ToArray()));
+
+                }
+                double[] avg = new double[upTo+1];
+                for(int i = 5; i <=upTo; i++)
+                {
+                    avg[i] = collisions.Select(x => x[i]).Average();
+                    if (avg[i] > 1)
+                    {
+                        double log2 = Math.Log(avg[i], 2);
+
+                        //MessageBox.Show(backtracking.Collisions.ToString());
+                        chart1.Invoke(new Action(() => {
+                            chart1.Series[1].Points.AddXY(i, log2);
+                        }));
+                    }
+                }
+                
+            
+                
+
+            }));
+            t.Start();
 
         }
     }
