@@ -2209,19 +2209,204 @@ namespace LC4Statistics
 
         }
 
-        private int[] getRandomIndexes(int count, int arrayLength)
+        private HashSet<int> getRandomIndexes(int maxCount, int arrayLength, int excludeValue)
         {
-            Random r = new Random();
-            int[] indexes = new int[count];
-            for(int i = 0; i < count; i++)
+            HashSet<int> indexes = new HashSet<int>();
+            if (arrayLength-1 <= maxCount)
             {
-                indexes[i] = r.Next(arrayLength);
+                int[] allValues = new int[arrayLength];
+                for(int i = 0; i < arrayLength;i++)
+                {
+                    if (i != excludeValue)
+                    {
+                        indexes.Add(i);
+                    }
+                }
+                return indexes;
             }
+
+            Random r = new Random();
+            while (indexes.Count < maxCount)
+            {
+                var value = r.Next(arrayLength);
+                if(value != excludeValue)
+                indexes.Add(value);
+            }
+
             return indexes;
+        }
+
+
+        public struct CollisionEstimationResult
+        {
+            public int NrOf0to5Possibilities { get; set; }
+            //public List<byte[]> Explored5Keys { get; set; }
+            public double EstimatedTotal { get; set; }
+            public double Avg5to10Possibilities { get; set; }
+            public double Avg10to15Possibilities { get; set; }
+            public double AvgCollisionsWith15Known { get; set; }
+        }
+
+        private int getIndexOfCorrectKeyPart(List<Tuple<byte[], int>> possibilities, List<byte[]> stateList)
+        {
+            for(int i = 0; i < possibilities.Count; i++)
+            {
+                var t = possibilities[i];
+                if(containsKey(t.Item1, stateList[t.Item2]))
+                {
+                    return i;
+                }
+            }
+            //should never happen!
+            return -1;
+        }
+
+        public CollisionEstimationResult getEstimatedCollisionsForPair(byte[] cipher0, byte[] plain0, List<byte[]> correctStateList)
+        {
+
+
+            byte[] known = new byte[36];
+            for (int i = 0; i < 36; i++)
+            {
+                known[i] = 255;
+            }
+
+            Backtracking b = new Backtracking();
+            var poss5 = b.calculateKeyPossibilitiesUntilNKnown(known, plain0, cipher0, 5);
+
+            int to5amount = poss5.Count;
+
+            //MessageBox.Show(to5amount.ToString());
+
+
+            var poss10 = new List<Tuple<byte[], int>>();
+            int keyIndex = getIndexOfCorrectKeyPart(poss5, correctStateList);
+            var correctState = poss5[keyIndex].Item1;
+            var cStateOffset = poss5[keyIndex].Item2;
+            var d10Key = b.calculateKeyPossibilitiesUntilNKnown(correctState, plain0.Skip(cStateOffset).ToArray(), cipher0.Skip(cStateOffset).ToArray(), 10, cStateOffset);
+
+            HashSet<int> rindex = new HashSet<int>();
+            if (poss5.Count > 0)
+            {
+                rindex = getRandomIndexes(100, poss5.Count, keyIndex);
+                foreach (int index in rindex)
+                {
+                    //MessageBox.Show(poss5[index].Where(x => x != (byte)255).Count().ToString());
+                    var state = poss5[index].Item1;
+                    var offset = poss5[index].Item2;
+                    var d10 = b.calculateKeyPossibilitiesUntilNKnown(state, plain0.Skip(offset).ToArray(), cipher0.Skip(offset).ToArray(), 10, cStateOffset);
+                    if (d10 != null)
+                    {
+                        poss10.AddRange(d10);
+                    }
+
+
+                }
+            }
+
+            
+
+
+            
+            //calculate by looking at keyPossibility seperately:
+            
+            double avg_amount5to10 = ((poss10.Count / (double)rindex.Count)*(poss5.Count-1) + d10Key.Count)/(double)poss5.Count;
+
+            //MessageBox.Show(avg_amount5to10.ToString());
+
+            var poss15 = new List<Tuple<byte[], int>>();// b.calculateKeyPossibilitiesUntilNKnown(poss10.First(), data10, cipher10, 15);
+            int keyIndex10 = getIndexOfCorrectKeyPart(d10Key, correctStateList);
+            var correctState10 = d10Key[keyIndex10].Item1;
+            var cStateOffset10 = d10Key[keyIndex10].Item2;
+            var d15Key = b.calculateKeyPossibilitiesUntilNKnown(correctState10, plain0.Skip(cStateOffset10).ToArray(), cipher0.Skip(cStateOffset10).ToArray(), 15, cStateOffset10);
+            rindex = new HashSet<int>();
+
+            if (poss10.Count > 0)
+            {
+                rindex = getRandomIndexes(100, poss10.Count, keyIndex10);
+                foreach (int index in rindex)
+                {
+                    var state = poss10[index].Item1;
+                    var offset = poss10[index].Item2;
+                    var d15 = b.calculateKeyPossibilitiesUntilNKnown(state, plain0.Skip(offset).ToArray(), cipher0.Skip(offset).ToArray(), 15, cStateOffset10);
+                    if (d15 != null)
+                    {
+                        poss15.AddRange(d15);
+                    }
+
+                }
+            }
+
+            //MessageBox.Show((poss15.Count / (double)20).ToString());
+            //rest
+            //double avg_amount10to15 = poss15.Count / (double)100;
+            double avg_amount10to15 = ((poss15.Count / (double)rindex.Count) * (poss10.Count - 1) + d15Key.Count) / (double)poss10.Count;
+
+            //MessageBox.Show(avg_amount10to15.ToString());
+
+            //todo random:
+            //var collisions15known = new List<byte[]>(); //b.calculateKeyPossibilitiesUntilNKnown(poss15.First(), data15, cipher15, 25);
+
+            var collisions15known = new List<int>();// b.calculateKeyPossibilitiesUntilNKnown(poss10.First(), data10, cipher10, 15);
+            int keyIndex15 = getIndexOfCorrectKeyPart(d15Key, correctStateList);
+            b.ResetCollisions();
+            var correctState15 = d15Key[keyIndex15].Item1;
+            var cStateOffset15 = d15Key[keyIndex15].Item2;
+            b.calculateKey(correctState15, plain0.Skip(cStateOffset15).ToArray(), cipher0.Skip(cStateOffset15).ToArray(), 15);
+            var dFinalKeyCollisions = b.Collisions;
+            //MessageBox.Show("1");
+            rindex = new HashSet<int>();
+
+            if (poss15.Count > 0)
+            {
+                rindex = getRandomIndexes(100, poss15.Count, keyIndex15);
+                foreach (int index in rindex)
+                {
+                    b.ResetCollisions();
+                    var state = poss15[index].Item1;
+                    var offset = poss15[index].Item2;
+                    var d15collisions = b.calculateKey(state, plain0.Skip(offset).ToArray(), cipher0.Skip(offset).ToArray(), 15);
+                    collisions15known.Add(b.Collisions);
+                }
+
+            }
+
+            double lastFactor = ((collisions15known.Sum() / (double)rindex.Count) * (poss15.Count - 1) + dFinalKeyCollisions) / poss15.Count;
+
+            //MessageBox.Show(lastFactor.ToString());
+
+            double estimatedCollisionsTotal = to5amount * avg_amount5to10 * avg_amount10to15 * lastFactor;
+            return new CollisionEstimationResult()
+            {
+                EstimatedTotal = estimatedCollisionsTotal,
+                NrOf0to5Possibilities = to5amount,
+                Avg5to10Possibilities = avg_amount5to10,
+                Avg10to15Possibilities = avg_amount10to15,
+                AvgCollisionsWith15Known = lastFactor
+            };
         }
 
         private void button21_Click(object sender, EventArgs e)
         {
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "avg";
+            ser2.BorderWidth = 2;
+
+            ser2.ChartType = SeriesChartType.Line;
+            chart1.Series.Add(ser2);
+            int round = 1;
+
+            Thread t = new Thread(new ThreadStart(() => { 
             for(int k = 0; k < 20000; k++)
             {
                 var key0 = GetRandomKey();
@@ -2232,11 +2417,7 @@ namespace LC4Statistics
                 byte[][] states = new byte[msgLength][];
                 byte[] cipher0 = new byte[msgLength];
 
-                //new:
-                if (!(cipher0[0] == data0[0] && (data0[1]==0 || cipher0[1]==0)))
-                {
-                    continue;
-                }
+                
 
                 for (int i = 0; i < msgLength; i++)
                 {
@@ -2244,96 +2425,37 @@ namespace LC4Statistics
                     cipher0[i] = lc4a.SingleByteEncryption(data0[i]);
                 }
 
-                byte[] known = new byte[36];
-                for (int i = 0; i < 36; i++)
+                //new:
+                if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0)))
                 {
-                    known[i] = 255;
+                    continue;
                 }
 
-                Backtracking b = new Backtracking();
-                var poss5 = b.calculateKeyPossibilitiesUntilNKnown(known, data0, cipher0, 5);
 
-                int to5amount = poss5.Count;
+                var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipher0, data0, states.ToList());
+                //double estimatedCollisionsTotal2 = getEstimatedCollisionsForPair(cipher0, data0);
+                //double estimatedCollisionsTotal3 = getEstimatedCollisionsForPair(cipher0, data0);
 
-                //MessageBox.Show(to5amount.ToString());
 
-                var data5 = data0.Skip(5).ToArray();
-                var cipher5 = cipher0.Skip(5).ToArray();
-                //todo random:
-
-                var poss10 = new List<byte[]>();
-                if (poss5.Count > 0)
-                {
-                    foreach (int index in getRandomIndexes(20, poss5.Count))
-                    {
-                        //MessageBox.Show(poss5[index].Where(x => x != (byte)255).Count().ToString());
-                        var d10 = b.calculateKeyPossibilitiesUntilNKnown(poss5[index], data5, cipher5, 10);
-                        if (d10 != null)
+                double log2 = Math.Log(estimatedCollisionsTotal1.EstimatedTotal, 2);
+                    File.AppendAllLines("collEstimation2.txt", new string[] { $"plain:{LC4.BytesToString(data0)}, cipher:{LC4.BytesToString(cipher0)}, est. collisions: {estimatedCollisionsTotal1.EstimatedTotal}, (a: {estimatedCollisionsTotal1.NrOf0to5Possibilities}, b: {estimatedCollisionsTotal1.Avg5to10Possibilities}, c: {estimatedCollisionsTotal1.Avg10to15Possibilities}, d: {estimatedCollisionsTotal1.AvgCollisionsWith15Known})" });
+                    
+                    chart1.Invoke(new Action(() => {
+                        if (log2 < 0)
                         {
-                            poss10.AddRange(d10);
+                            log2 = 0;
                         }
+                        chart1.Series[0].Points.AddXY(round, log2);
+                    }));
+                    round++;
+                //MessageBox.Show(log2+Environment.NewLine+LC4.BytesToString(data0)+Environment.NewLine+Environment.NewLine+LC4.BytesToString(cipher0));
 
-                    }
-                }
-                
-
-                //MessageBox.Show((poss10.Count / (double)20).ToString());
-                double avg_amount5to10 = (poss10.Count / (double)20);
-
-
-                var data10 = data0.Skip(10).ToArray();
-                var cipher10 = cipher0.Skip(10).ToArray();
-                //todo random:
-                var poss15 = new List<byte[]>();// b.calculateKeyPossibilitiesUntilNKnown(poss10.First(), data10, cipher10, 15);
-                if (poss10.Count > 0)
-                {
-                    foreach (int index in getRandomIndexes(20, poss10.Count))
-                    {
-                        var d15 = b.calculateKeyPossibilitiesUntilNKnown(poss10[index], data10, cipher10, 15);
-                        if (d15 != null)
-                        {
-                            poss15.AddRange(d15);
-                        }
-
-                    }
-                }
-                
-                //MessageBox.Show((poss15.Count / (double)20).ToString());
-                //rest
-                double avg_amount10to15 = poss15.Count / (double)20;
-
-
-                var data15 = data0.Skip(15).ToArray();
-                var cipher15 = cipher0.Skip(15).ToArray();
-                //todo random:
-                //var collisions15known = new List<byte[]>(); //b.calculateKeyPossibilitiesUntilNKnown(poss15.First(), data15, cipher15, 25);
-                List<int> collisions15known = new List<int>();
-                if (poss15.Count > 0)
-                {
-                    foreach (int index in getRandomIndexes(20, poss15.Count))
-                    {
-                        b.ResetCollisions();
-                        var d15collisions = b.calculateKey(poss15[index], data15, cipher15, 15);
-                        collisions15known.Add(b.Collisions);
-                    }
-
-                }
-
-                double lastFactor = 1;
-                if (collisions15known.Count > 0)
-                {
-                    lastFactor = collisions15known.Average();
-                }
-               
-
-                double estimatedCollisionsTotal = to5amount * avg_amount5to10 * avg_amount10to15 * lastFactor;
-                double log2 = Math.Log(estimatedCollisionsTotal, 2);
-
-                MessageBox.Show(log2.ToString());
 
                 //MessageBox.Show(collisions15known.Average().ToString());
             }
-            
+            }));
+            t.Start();
+
 
         }
     }

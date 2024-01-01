@@ -497,12 +497,12 @@ namespace LC4Statistics
 
 
 
-        public List<byte[]> calculateKeyPossibilitiesUntilNKnown(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int n, byte plaintextIndex = 255, byte ciphertextIndex = 255)
+        public List<Tuple<byte[], int>> calculateKeyPossibilitiesUntilNKnown(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int n, int advanced=0, byte plaintextIndex = 255, byte ciphertextIndex = 255)
         {
-            List<byte[]> possibilities = new List<byte[]>();
+            List<Tuple<byte[], int>> possibilities = new List<Tuple<byte[], int>>();
             if (!knownState.Contains((byte)255))
             {
-                possibilities.Add(knownState);
+                possibilities.Add(Tuple.Create(knownState, advanced));
                 return possibilities;
 
             }
@@ -532,7 +532,7 @@ namespace LC4Statistics
             //temp value
             if (knownState.Where(x => x != (byte)255).Count() >= n)
             {
-                possibilities.Add(knownState);
+                possibilities.Add(Tuple.Create(knownState, advanced));
                 return possibilities;
             }
 
@@ -565,7 +565,7 @@ namespace LC4Statistics
                         //calculate new state:
                         //MessageBox.Show("cont1");
                         byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
-                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n);
+                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n, advanced+1);
                     }
                     else
                     {
@@ -580,7 +580,7 @@ namespace LC4Statistics
                     {
                         //calculate new state:
                         byte[] nextState = newState(knownState, plaintextIndex, ciphertextIndex);
-                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n);
+                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n, advanced+1);
                     }
                     else
                     {
@@ -601,7 +601,7 @@ namespace LC4Statistics
                         byte[] guessedState = new byte[36];
                         Array.Copy(knownState, guessedState, 36);
                         guessedState[0] = i;
-                        var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, plaintextIndex);
+                        var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, advanced, plaintextIndex);
                         if (calcState != null)
                         {
                             possibilities.AddRange(calcState);
@@ -620,7 +620,7 @@ namespace LC4Statistics
                     {
                         //calculate new state:
                         byte[] nextState = newState(knownState, plainIndex, ciphertextIndex);
-                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n);
+                        return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n, advanced+1);
                     }
                     else
                     {
@@ -641,7 +641,7 @@ namespace LC4Statistics
                         byte[] guessedState = new byte[36];
                         Array.Copy(knownState, guessedState, 36);
                         guessedState[0] = i;
-                        var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, 255, ciphertextIndex);
+                        var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, advanced, 255, ciphertextIndex);
                         if (calcState != null)
                         {
                             possibilities.AddRange(calcState);
@@ -661,7 +661,7 @@ namespace LC4Statistics
                     byte[] guessedState = new byte[36];
                     Array.Copy(knownState, guessedState, 36);
                     guessedState[p_index] = plaintext.First();
-                    var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, p_index, 255);
+                    var calcState = calculateKeyPossibilitiesUntilNKnown(guessedState, plaintext, ciphertext, n, advanced, p_index, 255);
                     if (calcState != null)
                     {
                         possibilities.AddRange(calcState);
