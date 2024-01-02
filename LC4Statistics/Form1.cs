@@ -2406,7 +2406,8 @@ namespace LC4Statistics
             chart1.Series.Add(ser2);
             int round = 1;
 
-            Thread t = new Thread(new ThreadStart(() => { 
+            Thread t = new Thread(new ThreadStart(() => {
+                List<double> complexities = new List<double>();
             for(int k = 0; k < 20000; k++)
             {
                 var key0 = GetRandomKey();
@@ -2426,7 +2427,7 @@ namespace LC4Statistics
                 }
 
                 //new:
-                if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0)))
+                if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0)) && !(data0[0] == data0[1] || cipher0[0] == cipher0[1]))
                 {
                     continue;
                 }
@@ -2448,11 +2449,16 @@ namespace LC4Statistics
                         chart1.Series[0].Points.AddXY(round, log2);
                     }));
                     round++;
+                    complexities.Add(estimatedCollisionsTotal1.EstimatedTotal);
+                    label3.Invoke(new Action(() => {
+                        label3.Text = Math.Log(complexities.Average(), 2).ToString();
+                    }));
                 //MessageBox.Show(log2+Environment.NewLine+LC4.BytesToString(data0)+Environment.NewLine+Environment.NewLine+LC4.BytesToString(cipher0));
 
-
+                    
                 //MessageBox.Show(collisions15known.Average().ToString());
             }
+                MessageBox.Show("fertig!");
             }));
             t.Start();
 
