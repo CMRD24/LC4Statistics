@@ -150,14 +150,37 @@ namespace LC4Statistics
             collisions = 0;
         }
 
+        private byte missingCharacter(byte[] state)
+        {
+            for(byte i = 0; i < 36; i++)
+            {
+                if (!state.Contains(i))
+                {
+                    return i;
+                }
+            }
+            return 255;
+        }
+
         public Tuple<byte[], int> calculateKey(byte[] knownState, IEnumerable<byte> plaintext, IEnumerable<byte> ciphertext, int advancement, byte plaintextIndex = 255, byte ciphertextIndex = 255)
         {
+
             if (!knownState.Contains((byte)255))
             {
 
                 return Tuple.Create(knownState, advancement);
 
             }
+            /*
+             * This is not possible, because it does not check the validity of the last character!
+            if(knownState.Where(x => x == (byte)255).Count() == 1)
+            {
+                byte[] state = new byte[36];
+                Array.Copy(knownState, state, 36);
+                int index = Array.IndexOf(knownState, (byte)255);
+                state[index] = missingCharacter(knownState);
+                return Tuple.Create(state, advancement);
+            }*/
 
             //!
             if (plaintext.First() == ciphertext.First())
@@ -327,6 +350,17 @@ namespace LC4Statistics
                 return possibilities;
 
             }
+            /*
+             * This is not possible, because it does not check the validity of the last character!
+            if (knownState.Where(x => x == (byte)255).Count() == 1)
+            {
+                byte[] state = new byte[36];
+                Array.Copy(knownState, state, 36);
+                int index = Array.IndexOf(knownState, (byte)255);
+                state[index] = missingCharacter(knownState);
+                possibilities.Add(state);
+                return possibilities;
+            }*/
 
             //!
             if (plaintext.First() == ciphertext.First())
@@ -507,7 +541,25 @@ namespace LC4Statistics
 
             }
 
+            /*
+             * This is not possible, because it does not check the validity of the last character!
+             * if (knownState.Where(x => x == (byte)255).Count() == 1)
+            {
+                byte[] state = new byte[36];
+                Array.Copy(knownState, state, 36);
+                int index = Array.IndexOf(knownState, (byte)255);
+                state[index] = missingCharacter(knownState);
+                possibilities.Add(Tuple.Create(state, advanced));
+                return possibilities;
+            }*/
+
             //!
+            if(plaintext.Count()==0)
+            {
+                //exception!!!
+            }
+
+
             if (plaintext.First() == ciphertext.First())
             {
                 if (!setStateField(knownState, 0, 0))

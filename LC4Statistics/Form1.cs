@@ -15,8 +15,9 @@ using System.Threading;
 using Newtonsoft.Json;
 using System.Data.OleDb;
 using System.Windows.Forms.DataVisualization.Charting;
-
-
+using System.Text.RegularExpressions;
+using System.Runtime.InteropServices.ComTypes;
+using MathNet.Numerics.Statistics;
 
 namespace LC4Statistics
 {
@@ -63,7 +64,7 @@ namespace LC4Statistics
             byte[] arr = GetRandomKey();
             LC4 lc4 = new LC4(arr, 0, 0);
             textBox1.Text = LC4.BytesToString(arr);
-            RandomNumberGenerator randomNumberGenerator= RandomNumberGenerator.Create();
+            RandomNumberGenerator randomNumberGenerator = RandomNumberGenerator.Create();
             List<Tuple<byte, byte>> result = new List<Tuple<byte, byte>>();
             List<string> states = new List<string>();
             for(int i = 0; i < 1000000; i++)
@@ -441,7 +442,7 @@ namespace LC4Statistics
                         label3.Invoke(new Action(() => {
                             label3.Text = l;
                         }));
-                    File.AppendAllLines("pr1.txt", new string[] { l });
+                    File.AppendAllLines("authentication-failures.txt", new string[] { l });
                         chart1.Invoke(new Action(() => {
                             chart1.Series[sname].Points.AddXY(st, (double)count / (double)rep);
                         }));
@@ -1204,7 +1205,7 @@ namespace LC4Statistics
                             chart1.Series[sname].Points.AddXY(s, p);
                             chart1.Series["p*"].Points.AddXY(s, p_game);
                         }));
-
+                    File.AppendAllLines("random-ind-1000.txt", new string[] { $"{s};{p}" });
                 }
             }));
             t.Start();
@@ -1858,13 +1859,53 @@ namespace LC4Statistics
             return false;
         }
 
+        private void testAverageDepth()
+        {
+            int msgLength = 200;
+            int numberOfUnknowns = 25;
+
+            //generate key and plain+ciphertext:
+            byte[] key = GetRandomKey();
+            //File.AppendAllLines("tv.txt", new string[] { string.Join(",", key.Select(x => x.ToString())) });
+            byte[] coppiedKey = new byte[36];
+            Array.Copy(key, coppiedKey, 36);
+            byte[] plain = get36Rand(msgLength);
+            byte[][] states = new byte[msgLength][];
+            byte[] cipher = new byte[msgLength];
+            LC4 lc4a = new LC4(key, 0, 0);
+            for (int i = 0; i < msgLength; i++)
+            {
+                states[i] = lc4a.GetNormalizedState();
+                cipher[i] = lc4a.SingleByteEncryption(plain[i]);
+
+            }
+            byte[] partKey = removeNofKey(key, numberOfUnknowns);
+
+            Backtracking backtracking = new Backtracking();
+            var recovered = backtracking.calculateKey(partKey, plain, cipher, 0);
+
+            if (recovered == null)
+            {
+                MessageBox.Show("fail!");
+                return;
+            }
+            MessageBox.Show($"{LC4.BytesToString(states[recovered.Item2])}   (key ({recovered.Item2}))" + Environment.NewLine +
+                $"{LC4.BytesToString(recovered.Item1)}   (rec)");
+        }
+
         private void button19_Click(object sender, EventArgs e)
         {
             Thread t = new Thread(new ThreadStart(() => { 
             //test state function:
             //testStateFunction();
+
+                for(int i = 0; i < 100; i++)
+                {
+                    testAverageDepth();
+                }
+
             int msgLength = 20000;
-            int numberOfUnknowns = 31;
+            int numberOfUnknowns = 28;
 
             //generate key and plain+ciphertext:
             byte[] key = GetRandomKey();
@@ -2311,7 +2352,8 @@ namespace LC4Statistics
             //calculate by looking at keyPossibility seperately:
             
             double avg_amount5to10 = ((poss10.Count / (double)rindex.Count)*(poss5.Count-1) + d10Key.Count)/(double)poss5.Count;
-
+            int currentPos10Length = poss10.Count;
+            poss10.AddRange(d10Key);
             //MessageBox.Show(avg_amount5to10.ToString());
 
             var poss15 = new List<Tuple<byte[], int>>();// b.calculateKeyPossibilitiesUntilNKnown(poss10.First(), data10, cipher10, 15);
@@ -2323,7 +2365,7 @@ namespace LC4Statistics
 
             if (poss10.Count > 0)
             {
-                rindex = getRandomIndexes(100, poss10.Count, keyIndex10);
+                rindex = getRandomIndexes(100, poss10.Count,currentPos10Length+ keyIndex10);
                 foreach (int index in rindex)
                 {
                     var state = poss10[index].Item1;
@@ -2341,7 +2383,8 @@ namespace LC4Statistics
             //rest
             //double avg_amount10to15 = poss15.Count / (double)100;
             double avg_amount10to15 = ((poss15.Count / (double)rindex.Count) * (poss10.Count - 1) + d15Key.Count) / (double)poss10.Count;
-
+            int currentPos15Length = poss15.Count;
+            poss15.AddRange(d15Key);
             //MessageBox.Show(avg_amount10to15.ToString());
 
             //todo random:
@@ -2359,7 +2402,7 @@ namespace LC4Statistics
 
             if (poss15.Count > 0)
             {
-                rindex = getRandomIndexes(100, poss15.Count, keyIndex15);
+                rindex = getRandomIndexes(100, poss15.Count,currentPos15Length+ keyIndex15);
                 foreach (int index in rindex)
                 {
                     b.ResetCollisions();
@@ -2370,8 +2413,12 @@ namespace LC4Statistics
                 }
 
             }
-
-            double lastFactor = ((collisions15known.Sum() / (double)rindex.Count) * (poss15.Count - 1) + dFinalKeyCollisions) / poss15.Count;
+            double lastFactor =  dFinalKeyCollisions / (double)poss15.Count;
+            if (rindex.Count > 0)
+            {
+                 lastFactor = ((collisions15known.Sum() / (double)rindex.Count) * (poss15.Count - 1) + dFinalKeyCollisions) / poss15.Count;
+            }
+            
 
             //MessageBox.Show(lastFactor.ToString());
 
@@ -2385,6 +2432,59 @@ namespace LC4Statistics
                 AvgCollisionsWith15Known = lastFactor
             };
         }
+
+        private int getPlainCipherScore(byte[] plain, byte[] cipher)
+        {
+            int score = 0;
+            //first 8:
+            HashSet<byte> consideredLetters = new HashSet<byte>();
+            for(int i = 0; i < 4; i++)
+            {
+                if (plain[i] == cipher[i])
+                {
+                    if (consideredLetters.Add(plain[i]))
+                    {
+                        score++;
+                    }
+                }
+                else if (plain[i] == cipher[i+1])
+                {
+                    if (consideredLetters.Add(plain[i]))
+                    {
+                        score++;
+                    }
+                }
+                else if (plain[i+1] == cipher[i])
+                {
+                    if (consideredLetters.Add(plain[i+1]))
+                    {
+                        score++;
+                    }
+                }
+                else if (plain[i] == plain[i+1])
+                {
+                    if (consideredLetters.Add(plain[i]))
+                    {
+                        score++;
+                    }
+                }
+                else if (cipher[i] == cipher[i + 1])
+                {
+                    if (consideredLetters.Add(cipher[i]))
+                    {
+                        score++;
+                    }
+                }
+            }
+            return score;
+        }
+
+        
+
+        /*private int getBestIndex(byte[] plain, byte[] cipher)
+        {
+
+        }*/
 
         private void button21_Click(object sender, EventArgs e)
         {
@@ -2408,13 +2508,15 @@ namespace LC4Statistics
 
             Thread t = new Thread(new ThreadStart(() => {
                 List<double> complexities = new List<double>();
-            for(int k = 0; k < 20000; k++)
+            for(int k = 0; k < 1000; k++)
             {
                 var key0 = GetRandomKey();
                 LC4 lc4a = new LC4(key0, 0, 0);
                 int msgLength = 500;
                 byte[] data0 = get36Rand(msgLength);//new byte[msgLength]; //get36Rand(msgLength);
-                                                    // for(int k = 0; k < msgLength; k++) { data0[k] = 0; }
+                                                     //for(int l = 0; l < 5; l++) { data0[l] = 5; }
+                                                    
+                
                 byte[][] states = new byte[msgLength][];
                 byte[] cipher0 = new byte[msgLength];
 
@@ -2426,20 +2528,36 @@ namespace LC4Statistics
                     cipher0[i] = lc4a.SingleByteEncryption(data0[i]);
                 }
 
-                //new:
-                if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0)) && !(data0[0] == data0[1] || cipher0[0] == cipher0[1]))
-                {
-                    continue;
-                }
+                    //new:
+                    /*if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0))) // && !(data0[0] == data0[1] || cipher0[0] == cipher0[1])
+                        {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[1] == data0[0]))
+                    {
+                        continue;
+                    }*/
+                    /*if(getPlainCipherScore(data0, cipher0) < 4)
+                    {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[0] == data0[0] && data0[1] == cipher0[0]))
+                    {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[0] == cipher0[2] && data0[0] == data0[2]))
+                    {
+                        continue;
+                    }*/
 
 
-                var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipher0, data0, states.ToList());
+                    var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipher0, data0, states.ToList());
                 //double estimatedCollisionsTotal2 = getEstimatedCollisionsForPair(cipher0, data0);
                 //double estimatedCollisionsTotal3 = getEstimatedCollisionsForPair(cipher0, data0);
 
 
                 double log2 = Math.Log(estimatedCollisionsTotal1.EstimatedTotal, 2);
-                    File.AppendAllLines("collEstimation2.txt", new string[] { $"plain:{LC4.BytesToString(data0)}, cipher:{LC4.BytesToString(cipher0)}, est. collisions: {estimatedCollisionsTotal1.EstimatedTotal}, (a: {estimatedCollisionsTotal1.NrOf0to5Possibilities}, b: {estimatedCollisionsTotal1.Avg5to10Possibilities}, c: {estimatedCollisionsTotal1.Avg10to15Possibilities}, d: {estimatedCollisionsTotal1.AvgCollisionsWith15Known})" });
+                    File.AppendAllLines("collEst-woSelection.txt", new string[] { $"{LC4.BytesToString(data0)}; {LC4.BytesToString(cipher0)}; {estimatedCollisionsTotal1.EstimatedTotal}; {estimatedCollisionsTotal1.NrOf0to5Possibilities}; {estimatedCollisionsTotal1.Avg5to10Possibilities}; {estimatedCollisionsTotal1.Avg10to15Possibilities}; {estimatedCollisionsTotal1.AvgCollisionsWith15Known}" });
                     
                     chart1.Invoke(new Action(() => {
                         if (log2 < 0)
@@ -2453,18 +2571,488 @@ namespace LC4Statistics
                     label3.Invoke(new Action(() => {
                         label3.Text = Math.Log(complexities.Average(), 2).ToString();
                     }));
-                //MessageBox.Show(log2+Environment.NewLine+LC4.BytesToString(data0)+Environment.NewLine+Environment.NewLine+LC4.BytesToString(cipher0));
+                    label4.Invoke(new Action(() => {
+                        label4.Text = Math.Log(complexities.Median(), 2).ToString();
+                    }));
+                    label5.Invoke(new Action(() => {
+                        label5.Text = Math.Log(complexities.StandardDeviation(), 2).ToString();
+                    }));
+                    //MessageBox.Show(log2+Environment.NewLine+LC4.BytesToString(data0)+Environment.NewLine+Environment.NewLine+LC4.BytesToString(cipher0));
 
-                    
-                //MessageBox.Show(collisions15known.Average().ToString());
-            }
+
+                    //MessageBox.Show(collisions15known.Average().ToString());
+                }
                 MessageBox.Show("fertig!");
             }));
             t.Start();
 
 
         }
+
+
+        private void button22_Click(object sender, EventArgs e)
+        {
+            /*Backtracking bt = new Backtracking();
+            var kk = removeNofKey(new byte[36], 36);
+            var v = bt.calculateKeyPossibilitiesUntilNKnown(kk, LC4.StringToByteState("abc"), LC4.StringToByteState("ccf"), 6);
+            //var v = getEstimatedCollisionsForPair(LC4.StringToByteState("abc"), LC4.StringToByteState("def"), sl);
+            MessageBox.Show(LC4.BytesToString(v[0].Item1) + "," + v[0].Item2);
+            */
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "avg";
+            ser2.BorderWidth = 2;
+
+            ser2.ChartType = SeriesChartType.Line;
+            chart1.Series.Add(ser2);
+            int round = 1;
+
+            Thread t = new Thread(new ThreadStart(() => {
+                List<double> bestcomplexities = new List<double>();
+                for (int k = 0; k < 100; k++)
+                {
+                    var key0 = GetRandomKey();
+                    LC4 lc4a = new LC4(key0, 0, 0);
+                    int msgLength = 200;
+                    byte[] data0 = get36Rand(msgLength);//new byte[msgLength]; //get36Rand(msgLength);
+                                                        //for(int l = 0; l < 5; l++) { data0[l] = 5; }
+
+
+                    byte[][] states = new byte[msgLength][];
+                    byte[] cipher0 = new byte[msgLength];
+
+                    File.AppendAllLines("collEstimation3.txt", new string[] { "-----------------------", LC4.BytesToString(key0) });
+
+                    for (int i = 0; i < msgLength; i++)
+                    {
+                        states[i] = lc4a.GetNormalizedState();
+                        cipher0[i] = lc4a.SingleByteEncryption(data0[i]);
+                    }
+
+                    //new:
+                    /*if (!(cipher0[0] == data0[0] && (data0[1] == 0 || cipher0[1] == 0))) // && !(data0[0] == data0[1] || cipher0[0] == cipher0[1])
+                        {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[1] == data0[0]))
+                    {
+                        continue;
+                    }*/
+                    /*if(getPlainCipherScore(data0, cipher0) < 4)
+                    {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[0] == data0[0] && data0[1] == cipher0[0]))
+                    {
+                        continue;
+                    }*/
+                    /*if (!(cipher0[0] == cipher0[2] && data0[0] == data0[2]))
+                    {
+                        continue;
+                    }*/
+                    List<double> complexities = new List<double>();
+                    for (int i = 0; i < 100; i++)
+                    {
+                        var cipher = cipher0.Skip(i).ToArray();
+                        var data = data0.Skip(i).ToArray();
+                        var states_i = states.Skip(i).ToArray();
+                        var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipher, data, states_i.ToList());
+                        //double estimatedCollisionsTotal2 = getEstimatedCollisionsForPair(cipher0, data0);
+                        //double estimatedCollisionsTotal3 = getEstimatedCollisionsForPair(cipher0, data0);
+
+
+                        double log2 = Math.Log(estimatedCollisionsTotal1.EstimatedTotal, 2);
+                        File.AppendAllLines("collEstimation3.txt", new string[] { $"{i}: plain:{LC4.BytesToString(data)}, cipher:{LC4.BytesToString(cipher)}, est. collisions: {estimatedCollisionsTotal1.EstimatedTotal}, (a: {estimatedCollisionsTotal1.NrOf0to5Possibilities}, b: {estimatedCollisionsTotal1.Avg5to10Possibilities}, c: {estimatedCollisionsTotal1.Avg10to15Possibilities}, d: {estimatedCollisionsTotal1.AvgCollisionsWith15Known})" });
+
+                        chart1.Invoke(new Action(() => {
+                            if (log2 < 0)
+                            {
+                                log2 = 0;
+                            }
+                            chart1.Series[0].Points.AddXY(round, log2);
+                        }));
+                        complexities.Add(estimatedCollisionsTotal1.EstimatedTotal);
+                    }
+                    double bestValue = complexities.Min();
+                    int index = complexities.IndexOf(bestValue);
+                    File.AppendAllLines("collEstimation3.txt", new string[] {$"best Index: {index}", "---------------------------------------------"});
+ 
+                     bestcomplexities.Add(bestValue);
+                    
+                    round++;
+                    
+                    label3.Invoke(new Action(() => {
+                        label3.Text = Math.Log(bestcomplexities.Average(), 2).ToString();
+                    }));
+                    //MessageBox.Show(log2+Environment.NewLine+LC4.BytesToString(data0)+Environment.NewLine+Environment.NewLine+LC4.BytesToString(cipher0));
+
+
+                    //MessageBox.Show(collisions15known.Average().ToString());
+                }
+                MessageBox.Show("fertig!");
+            }));
+            t.Start();
+        }
+
+       
+
+        private void button23_Click(object sender, EventArgs e)
+        {
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "new";
+
+            ser2.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser2);
+
+            Thread t = new Thread(new ThreadStart(() => { 
+            string[] lines = File.ReadAllLines("collEstimation3.txt");
+            List<string[]> s = new List<string[]>();
+                List<double> bestcomplexities = new List<double>();
+                for (int i = 0; i < lines.Length; i += 104)
+            {
+                var section = lines.Skip(i).Take(103).ToArray();
+                int index = int.Parse(Regex.Match(section.Last(), @"best Index: ([0-9]+)").Groups[1].Value);
+                string best = section[index+2];
+                Match m = Regex.Match(best, @"plain:(.+?), cipher:(.+?), est\. collisions: (.+?), ");
+                string key = section[1];
+                    //MessageBox.Show(key + Environment.NewLine + section.Last());
+                string plainAtIndex = m.Groups[1].Value;
+                string cipherAtIndex = m.Groups[2].Value;
+
+                    Match m0 = Regex.Match(section[2], @"plain:(.+?), cipher:(.+?), ");
+                    byte[] plain = LC4.StringToByteState(m0.Groups[1].Value);
+                    byte[] cipher = LC4.StringToByteState(m0.Groups[2].Value);
+                    // MessageBox.Show(m.Groups[3].Value);
+                    double coll = double.Parse(m.Groups[3].Value);
+                double log2 = Math.Log(coll, 2);
+                    int msgLength = 200;
+                    byte[][] states = new byte[msgLength][];
+                    byte[] cipherCalc = new byte[msgLength];
+
+                    LC4 lc4 = new LC4(LC4.StringToByteState(key), 0, 0);
+                    for (int j = 0; j < msgLength; j++)
+                    {
+                        states[j] = lc4.GetNormalizedState();
+                        cipherCalc[j] = lc4.SingleByteEncryption(plain[j]);
+                    }
+
+                    //sanity check:
+                    if (cipherCalc[199] != cipher[199])
+                    {
+                        MessageBox.Show("error");
+                    }
+
+                    var cipher_i = cipher.Skip(index).ToArray();
+                    var data_i = plain.Skip(index).ToArray();
+                    var states_i = states.Skip(index).ToArray();
+
+                    var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipher_i, data_i, states_i.ToList());
+                    double log2re = Math.Log(estimatedCollisionsTotal1.EstimatedTotal, 2);
+
+                    File.AppendAllLines("c3-recalculatedColl.txt", new string[] { $"{i}: est. collisions: {estimatedCollisionsTotal1.EstimatedTotal}, (a: {estimatedCollisionsTotal1.NrOf0to5Possibilities}, b: {estimatedCollisionsTotal1.Avg5to10Possibilities}, c: {estimatedCollisionsTotal1.Avg10to15Possibilities}, d: {estimatedCollisionsTotal1.AvgCollisionsWith15Known})" });
+
+
+                    chart1.Invoke(new Action(() => {
+                    if (log2 < 0)
+                    {
+                        log2 = 0;
+                    }
+                    chart1.Series[0].Points.AddXY(i, log2);
+                        if (log2re < 0)
+                        {
+                            log2re = 0;
+                        }
+                        chart1.Series[1].Points.AddXY(i, log2re);
+                    }));
+
+                    bestcomplexities.Add(estimatedCollisionsTotal1.EstimatedTotal);
+
+
+                    label3.Invoke(new Action(() => {
+                        label3.Text = Math.Log(bestcomplexities.Average(), 2).ToString();
+                    }));
+                }
+            }));
+            t.Start();
+        }
+
+        private void button24_Click(object sender, EventArgs e)
+        {
+            LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+            byte[] data = new byte[200];
+            for(int i=0; i<data.Length; i++)
+            {
+                data[i] = 0;
+            }
+            byte[] cipher = lc4.Encrypt(data);
+            MessageBox.Show(LC4.BytesToString(cipher));
+
+        }
+
+        private void button25_Click(object sender, EventArgs e)
+        {
+            testKPA();
+            /*
+            LC4 lc4 = new LC4(GetRandomKey(), 0, 0);
+            int msgLength = 100;
+            byte[] data = get36Rand(msgLength);
+            data[0] = 1;
+            data[1] = 1;
+            byte[][] states = new byte[msgLength][];
+            byte[] cipher = new byte[msgLength];
+            for (int j = 0; j < msgLength; j++)
+            {
+                states[j] = lc4.GetNormalizedState();
+                cipher[j] = lc4.SingleByteEncryption(data[j]);
+            }
+
+            IndexSearch s = new IndexSearch();
+            //MessageBox.Show(LC4.BytesToString(data) + Environment.NewLine + LC4.BytesToString(cipher) + Environment.NewLine + s.check(data, cipher).ToString());
+            var est = getEstimatedCollisionsForPair(cipher, data, states.ToList());
+            MessageBox.Show(LC4.BytesToString(data)+Environment.NewLine+LC4.BytesToString(cipher)+Environment.NewLine+s.check(data, cipher).ToString()+Environment.NewLine+est.EstimatedTotal);
+        */
+        }
+
+        void testKPA()
+        {
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "new";
+
+            ser2.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser2);
+
+            Thread t = new Thread(new ThreadStart(() => {
+                List<double> bestcomplexities = new List<double>();
+                for (int i = 0; i < 1; i++)
+                {
+                    int msgLength = 200;
+                    byte[] plain = get36Rand(msgLength);
+                    byte[][] states = new byte[msgLength][];
+                    byte[] cipherCalc = new byte[msgLength];
+
+                    byte[] key = GetRandomKey();
+                    LC4 lc4 = new LC4(key, 0, 0);
+                    for (int j = 0; j < msgLength; j++)
+                    {
+                        states[j] = lc4.GetNormalizedState();
+                        cipherCalc[j] = lc4.SingleByteEncryption(plain[j]);
+                    }
+
+
+                    Tuple<int, int> bestIndexValue = Tuple.Create(int.MaxValue, int.MaxValue);
+                    int bestIndex = 0;
+                    for(int j = 0; j < 100; j++)
+                    {
+                        IndexSearch isearch = new IndexSearch();
+                        var r = isearch.check(plain.Skip(j).ToArray(), cipherCalc.Skip(j).ToArray());
+                        if(r.Item1 < bestIndexValue.Item1 || (r.Item1==bestIndexValue.Item1 && r.Item2 < bestIndexValue.Item2))
+                        {
+                            bestIndexValue = r;
+                            bestIndex = j;
+                        }
+                    }
+                    //MessageBox.Show(bestIndexValue.Item1+","+bestIndexValue.Item2);
+                    var estimatedCollisionsTotal1 = getEstimatedCollisionsForPair(cipherCalc.Skip(bestIndex).ToArray(), plain.Skip(bestIndex).ToArray(), states.Skip(bestIndex).ToList());
+                    double log2 = Math.Log(estimatedCollisionsTotal1.EstimatedTotal, 2);
+                    //File.AppendAllLines("c4-coll.txt", new string[] { $"{i}: tuple: ({bestIndexValue.Item1}, {bestIndexValue.Item2}) key: {LC4.BytesToString(states[bestIndex])}, plain: {LC4.BytesToString(plain.Skip(bestIndex).ToArray())}, cipher: {LC4.BytesToString(cipherCalc.Skip(bestIndex).ToArray())}  est. collisions: {estimatedCollisionsTotal1.EstimatedTotal}, (a: {estimatedCollisionsTotal1.NrOf0to5Possibilities}, b: {estimatedCollisionsTotal1.Avg5to10Possibilities}, c: {estimatedCollisionsTotal1.Avg10to15Possibilities}, d: {estimatedCollisionsTotal1.AvgCollisionsWith15Known})" });
+                    File.AppendAllLines("collEst-w.index.Selection.txt", new string[] { $"{bestIndex}; {LC4.BytesToString(plain)}; {LC4.BytesToString(cipherCalc)}; {estimatedCollisionsTotal1.EstimatedTotal}; {estimatedCollisionsTotal1.NrOf0to5Possibilities}; {estimatedCollisionsTotal1.Avg5to10Possibilities}; {estimatedCollisionsTotal1.Avg10to15Possibilities}; {estimatedCollisionsTotal1.AvgCollisionsWith15Known}" });
+
+
+                    chart1.Invoke(new Action(() => {
+                        if (log2 < 0)
+                        {
+                            log2 = 0;
+                        }
+                        chart1.Series[0].Points.AddXY(i, log2);
+                    }));
+
+                    bestcomplexities.Add(estimatedCollisionsTotal1.EstimatedTotal);
+
+
+                    label3.Invoke(new Action(() => {
+                        label3.Text = Math.Log(bestcomplexities.Average(), 2).ToString();
+                    }));
+                    label4.Invoke(new Action(() => {
+                        label4.Text = Math.Log(bestcomplexities.Median(), 2).ToString();
+                    }));
+                    label5.Invoke(new Action(() => {
+                        label5.Text = Math.Log(bestcomplexities.StandardDeviation(), 2).ToString();
+                    }));
+                }
+            }));
+            t.Start();
+        }
+
+        bool encryptedOnesIND(byte[] ciphertext)
+        {
+            
+            int first = Array.IndexOf(ciphertext, (byte)0);
+            if (first != -1)
+            {
+                foreach(byte b in ciphertext.Skip(first))
+                {
+                    if(b != 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        void testIndCPA(int msgLength, int rounds)
+        {
+            RandomNumberGenerator r = RandomNumberGenerator.Create();
+            int successCounter = 0;
+            for (int i = 0; i < rounds; i++)
+            {
+                var key = GetRandomKey();
+                LC4 lc4 = new LC4(key, 0, 0);
+                var one = new byte[msgLength];
+                var zero = new byte[msgLength];
+                for(int j=0; j < msgLength; j++)
+                {
+                    one[j] = 1; 
+                    zero[j] = 0;
+                }
+                //choose message: 
+                byte[] rbyte = new byte[msgLength];
+                r.GetBytes(rbyte);
+                bool encOne = rbyte[0] % 2 == 0;
+                var ctext = encOne? lc4.Encrypt(one) : lc4.Decrypt(zero);
+
+                //distinguish:
+                if (encryptedOnesIND(ctext) == encOne)
+                {
+                    successCounter++;
+                }
+
+            }
+
+            MessageBox.Show("successrate: " + successCounter + "/" + rounds);
+        }
+
+        private void button26_Click(object sender, EventArgs e)
+        {
+            testIndCPA(200,100000);
+        }
+
+        private void button27_Click(object sender, EventArgs e)
+        {
+            chart1.Series.Clear();
+            string sname = "Kollisionen";
+            Series ser = new Series("Kollisionen");
+            ser.ChartArea = "ChartArea1";
+            ser.Name = sname;
+
+            ser.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser);
+
+            Series ser2 = new Series("avg");
+            ser2.ChartArea = "ChartArea1";
+            ser2.Name = "new";
+
+            ser2.ChartType = SeriesChartType.Point;
+            chart1.Series.Add(ser2);
+
+            Thread t = new Thread(new ThreadStart(() => {
+                List<double> bestcomplexities = new List<double>();
+                string[] file = File.ReadAllLines("collEst-w.index.Selection.txt");
+                int i = 0;
+                foreach(string line in file)
+                {
+                    double estimatedCollisionsTotal1 = double.Parse(line.Split(';')[3].Trim());
+                    double log2 = Math.Log(estimatedCollisionsTotal1, 2);
+                    chart1.Invoke(new Action(() => {
+                        if (log2 < 0)
+                        {
+                            log2 = 0;
+                        }
+                        chart1.Series[0].Points.AddXY(i, log2);
+
+                    }));
+                    i++;
+
+                    bestcomplexities.Add(estimatedCollisionsTotal1);
+
+
+                    label3.Invoke(new Action(() => {
+                        label3.Text = Math.Log(bestcomplexities.Average(), 2).ToString();
+                    }));
+                    label4.Invoke(new Action(() => {
+                        label4.Text = Math.Log(bestcomplexities.Median(), 2).ToString();
+                    }));
+                    label5.Invoke(new Action(() => {
+                        label5.Text = Math.Log(bestcomplexities.StandardDeviation(), 2).ToString();
+                    }));
+                }
+            }));
+            t.Start();
+        }
+
+        private void button30_Click(object sender, EventArgs e)
+        {
+            Random r = new Random();
+            textBox5.Text = LC5.BytesToString(GetRandomKey()) + ";" + r.Next(0, 6) + ";" + r.Next(0, 6);
+        }
+
+        private void button28_Click(object sender, EventArgs e)
+        {
+            string[] s = textBox5.Text.Split(';');
+            byte[] key = LC5.StringToByteState(s[0]);
+            byte i2 = (byte)int.Parse(s[1]);
+            byte j2 = (byte)int.Parse(s[2]);
+
+            LC5 lc5 = new LC5(key, 0, 0, i2, j2);
+            byte[] clear = LC5.StringToByteState(textBox3.Text);
+            byte[] cipher = lc5.Encrypt(clear);
+            textBox4.Text = LC5.BytesToString(cipher);
+        }
+
+        private void button29_Click(object sender, EventArgs e)
+        {
+            string[] s = textBox5.Text.Split(';');
+            byte[] key = LC5.StringToByteState(s[0]);
+            byte i2 = (byte)int.Parse(s[1]);
+            byte j2 = (byte)int.Parse(s[2]);
+
+            LC5 lc5 = new LC5(key, 0, 0, i2, j2);
+            byte[] cipher = LC5.StringToByteState(textBox4.Text);
+            byte[] plain = lc5.Decrypt(cipher);
+            textBox3.Text = LC5.BytesToString(plain);
+        }
     }
+
+
 
     public static class EM
     {
