@@ -1,4 +1,5 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -203,31 +204,25 @@ namespace LC4Statistics
                 ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
             }
 
-            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
-
 
             if (plaintextIndex != 255)
             {
                 if (knownState[0] != 255)
                 {
                     byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
                     if (ciphertextIndex != 255 && ciphertextIndex != cipherIndex)
                     {
-                        //MessageBox.Show("f1");
                         collisions++;
                         return null;
                     }
                     if (setStateField(knownState, cipherIndex, ciphertext.First()))
                     {
                         //calculate new state:
-                        //MessageBox.Show("cont1");
                         byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
                         return calculateKey(nextState, plaintext.Skip(1), ciphertext.Skip(1), advancement + 1);
                     }
                     else
                     {
-                        //MessageBox.Show("f2");
                         collisions++;
                         return null;
                     }
@@ -250,7 +245,6 @@ namespace LC4Statistics
                 }
                 else
                 {
-                    //MessageBox.Show("guess s0");
                     //guess s0
                     //todo: how to enhance guessing of ratio s0?
                     //start at 1 because it can not be zero (would end up in first case)
@@ -295,7 +289,7 @@ namespace LC4Statistics
                     // (only ciphertextIndex known)
                     //guess s0:
                     //start at 1 because it can not be zero (would end up in first case)
-                    //MessageBox.Show("guess s0");
+                    
 
                     for (byte i = 1; i < 36; i++)
                     {
@@ -318,7 +312,6 @@ namespace LC4Statistics
             }
             else
             {
-                //MessageBox.Show("guess index of plaintext");
                 //nothing known
                 //guess index of plaintext:
                 //how to enhance? --> !!!
@@ -370,19 +363,6 @@ namespace LC4Statistics
                     return null;
                 }
             }
-            /*var unknownFields = EM.FindAllIndexof(knownState, (byte)255);
-            if (unknownFields.Length == 1)
-            {
-                //which value is missing?
-                for(byte i = 0; i < 36; i++)
-                {
-                    if (!knownState.Contains(i))
-                    {
-                        knownState[unknownFields[0]] = i;
-                        return Tuple.Create(knownState, advancement);
-                    }
-                }
-            }*/
 
             //temp value
             if (depth == 0)
@@ -401,30 +381,23 @@ namespace LC4Statistics
                 ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
             }
 
-            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
-
-
             if (plaintextIndex != 255)
             {
                 if (knownState[0] != 255)
                 {
                     byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
                     if (ciphertextIndex != 255 && ciphertextIndex != cipherIndex)
                     {
-                        //MessageBox.Show("f1");
                         return null;
                     }
                     if (setStateField(knownState, cipherIndex, ciphertext.First()))
                     {
                         //calculate new state:
-                        //MessageBox.Show("cont1");
                         byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
                         return calculateKeyPossibilities(nextState, plaintext.Skip(1), ciphertext.Skip(1), depth - 1);
                     }
                     else
                     {
-                        //MessageBox.Show("f2");
                         return null;
                     }
                 }
@@ -445,7 +418,6 @@ namespace LC4Statistics
                 }
                 else
                 {
-                    //MessageBox.Show("guess s0");
                     //guess s0
                     for (byte i = 0; i < 36; i++)
                     {
@@ -486,7 +458,6 @@ namespace LC4Statistics
                 {
                     //todo (only ciphertextIndex known)
                     //guess s0:
-                    //MessageBox.Show("guess s0");
                     for (byte i = 0; i < 36; i++)
                     {
                         if (knownState.Contains(i))
@@ -508,7 +479,6 @@ namespace LC4Statistics
             }
             else
             {
-                //MessageBox.Show("guess index of plaintext");
                 //nothing known
                 //guess index of plaintext:
                 foreach (byte p_index in EM.FindAllIndexof(knownState, (byte)255))
@@ -522,7 +492,6 @@ namespace LC4Statistics
                         possibilities.AddRange(calcState);
                     }
                 }
-                //MessageBox.Show("r3:"+possibilities.Count);
                 return possibilities;
             }
 
@@ -557,6 +526,7 @@ namespace LC4Statistics
             if(plaintext.Count()==0)
             {
                 //exception!!!
+                throw new Exception("not enough ciphertext to determine key!");
             }
 
 
@@ -567,21 +537,7 @@ namespace LC4Statistics
                     return null;
                 }
             }
-            /*var unknownFields = EM.FindAllIndexof(knownState, (byte)255);
-            if (unknownFields.Length == 1)
-            {
-                //which value is missing?
-                for(byte i = 0; i < 36; i++)
-                {
-                    if (!knownState.Contains(i))
-                    {
-                        knownState[unknownFields[0]] = i;
-                        return Tuple.Create(knownState, advancement);
-                    }
-                }
-            }*/
 
-            //temp value
             if (knownState.Where(x => x != (byte)255).Count() >= n)
             {
                 possibilities.Add(Tuple.Create(knownState, advanced));
@@ -598,30 +554,24 @@ namespace LC4Statistics
                 ciphertextIndex = (byte)Array.IndexOf(knownState, ciphertext.First());
             }
 
-            //MessageBox.Show(plaintextIndex + "->" + ciphertextIndex);
-
 
             if (plaintextIndex != 255)
             {
                 if (knownState[0] != 255)
                 {
                     byte cipherIndex = getIndex((byte)plaintextIndex, knownState[0]);
-                    //MessageBox.Show("calc.c.i.: " + cipherIndex);
                     if (ciphertextIndex != 255 && ciphertextIndex != cipherIndex)
                     {
-                        //MessageBox.Show("f1");
                         return null;
                     }
                     if (setStateField(knownState, cipherIndex, ciphertext.First()))
                     {
                         //calculate new state:
-                        //MessageBox.Show("cont1");
                         byte[] nextState = newState(knownState, plaintextIndex, cipherIndex);
                         return calculateKeyPossibilitiesUntilNKnown(nextState, plaintext.Skip(1), ciphertext.Skip(1), n, advanced+1);
                     }
                     else
                     {
-                        //MessageBox.Show("f2");
                         return null;
                     }
                 }
@@ -642,7 +592,6 @@ namespace LC4Statistics
                 }
                 else
                 {
-                    //MessageBox.Show("guess s0");
                     //guess s0
                     for (byte i = 0; i < 36; i++)
                     {
@@ -681,9 +630,7 @@ namespace LC4Statistics
                 }
                 else
                 {
-                    //todo (only ciphertextIndex known)
                     //guess s0:
-                    //MessageBox.Show("guess s0");
                     for (byte i = 0; i < 36; i++)
                     {
                         if (knownState.Contains(i))
@@ -705,7 +652,6 @@ namespace LC4Statistics
             }
             else
             {
-                //MessageBox.Show("guess index of plaintext");
                 //nothing known
                 //guess index of plaintext:
                 foreach (byte p_index in EM.FindAllIndexof(knownState, (byte)255))
@@ -719,7 +665,6 @@ namespace LC4Statistics
                         possibilities.AddRange(calcState);
                     }
                 }
-                //MessageBox.Show("r3:"+possibilities.Count);
                 return possibilities;
             }
 

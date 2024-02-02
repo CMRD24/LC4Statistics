@@ -27,7 +27,6 @@ namespace LC4Statistics
                 do
                 {
                     hasNewDetermined = applyFirstK(i);
-                    //MessageBox.Show(hasNewDetermined.ToString());
                     if (!hasNewDetermined)
                     {
                         //guess:
@@ -55,7 +54,6 @@ namespace LC4Statistics
                     
                 }
                 while (hasNewDetermined);
-                //MessageBox.Show(guessed.ToString());
             }
             int vars = plain.Take(lookInto).Concat(cipher.Take(lookInto)).Distinct().Count()+lookInto;
 
@@ -72,7 +70,6 @@ namespace LC4Statistics
                 }
                 s = s + (set?"x":"_");
             }
-            //MessageBox.Show(differentChars.ToString());
             return Tuple.Create(guessed, vars);
 
             bool applyFirstK(int k)

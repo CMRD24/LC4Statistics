@@ -1,11 +1,11 @@
 
 import math
 
-for n in range(5,26):
+for n in range(5,201):
     
     a = n
     
     for i in range(1,(n-1)//2+1):
         a += i*(n//(2*i))+(n%i)*((n//i)%2)
         
-    print(n,": ",a, ": ",(a/2)/n)
+    print(n,": ",a, ":", a/2, ": ",(a/2)/n)
