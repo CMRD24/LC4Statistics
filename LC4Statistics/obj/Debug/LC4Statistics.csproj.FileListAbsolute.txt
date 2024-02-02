@@ -1,0 +1,17 @@
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\bin\Debug\LC4Statistics.exe.config
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\bin\Debug\LC4Statistics.exe
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\bin\Debug\LC4Statistics.pdb
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\bin\Debug\Newtonsoft.Json.dll
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\bin\Debug\Newtonsoft.Json.xml
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.csproj.AssemblyReference.cache
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.csproj.SuggestedBindingRedirects.cache
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.Form1.resources
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.Properties.Resources.resources
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.csproj.GenerateResource.cache
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.csproj.CoreCompileInputs.cache
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.csproj.CopyComplete
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.exe
+C:\Users\claud\Source\Repos\LC4Statistics\LC4Statistics\obj\Debug\LC4Statistics.pdb
+C:\Users\claud\source\repos\LC4Statistics\LC4Statistics\bin\Debug\libz3.dll
+C:\Users\claud\source\repos\LC4Statistics\LC4Statistics\bin\Debug\MathNet.Numerics.dll
+C:\Users\claud\source\repos\LC4Statistics\LC4Statistics\bin\Debug\MathNet.Numerics.xml

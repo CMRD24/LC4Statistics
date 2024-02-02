@@ -228,6 +228,8 @@ namespace LC4Statistics
             return result;
         }
 
+       
+
         public byte SingleByteEncryption(byte plaintextByte)
         {
             
@@ -238,7 +240,7 @@ namespace LC4Statistics
             //MessageBox.Show($"r: {r}, c: {c}, x: {x}, y: {y}");
             byte enc = getByIndex(State, ciphertextRow, ciphertextColumn);
 
-            //File.AppendAllLines("test.txt", new string[] {$"state: {BytesToString(State)}, i1:{I1},j1:{J1},i2:{I2},j2:{J2}, c_k:{ByteToChar(plaintextByte)}, pr:{plaintextRow}, pc:{plainTextColumn}, enc:{enc}"});
+            //File.AppendAllLines("lc5-test2.txt", new string[] {$"state: {BytesToString(State)}, i1:{I1},j1:{J1},i2:{I2},j2:{J2}, c_k:{ByteToChar(plaintextByte)}, pr:{plaintextRow}, pc:{plainTextColumn}, enc:{enc}"});
 
             //update state:
             State = rotateRowLeft(State, plaintextRow, 5);
@@ -261,6 +263,7 @@ namespace LC4Statistics
             I2 = (byte)((I2 + nrOfRight) % 6);
             int nrOfDown = plaintextByte % 6 + valueOnTopOfI2J2 % 6;
             J2 = (byte)((J2 + nrOfDown) % 6);
+
 
             //File.AppendAllLines("test.txt", new string[] { $"update: {BytesToString(State)}, i1:{I1},j1:{J1},i2:{I2},j2:{J2}" });
 
