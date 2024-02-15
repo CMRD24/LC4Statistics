@@ -1,0 +1,96 @@
+reset
+set terminal pdf color
+set grid
+set title "|mac|=2"
+set autoscale yfix
+set xrange [-0.5:29.5]
+set yrange [0:]
+set ylabel "Wahrscheinlichkeit gleicher MAC"
+set xlabel "Abstand des veränderten Zeichens zum Nachrichtenende"
+set datafile separator ":"
+set boxwidth 0.7
+set style fill transparent solid 0.7
+set style line 1 lc rgb '#000000' lw 3
+set output 'lc4-auth-mac2-plot.pdf'
+plot "authentication-failures-mac2.txt" using 2:($4/$3) with boxes lc rgb "blue" title "", 0.0007716 ls 1 title "1/36^2"
+
+
+
+reset
+set terminal pdf color
+set grid
+set title "|mac|=3"
+set autoscale yfix
+set xrange [-0.5:29.5]
+set yrange [0:]
+set ylabel "Wahrscheinlichkeit gleicher MAC"
+set xlabel "Abstand des veränderten Zeichens zum Nachrichtenende"
+set datafile separator ":"
+set boxwidth 0.7
+set style fill transparent solid 0.7
+set style line 1 lc rgb '#000000' lw 3
+set output 'lc4-auth-mac3-plot.pdf'
+plot "authentication-failures-mac3.txt" using 2:($4/$3) with boxes lc rgb "blue" title "", 0.000021433 ls 1 title "1/36^3"
+
+
+reset
+set terminal pdf color
+set grid
+set title "|mac|=4"
+set autoscale yfix
+set xrange [-0.5:29.5]
+set yrange [0:]
+set ylabel "Wahrscheinlichkeit gleicher MAC"
+set xlabel "Abstand des veränderten Zeichens zum Nachrichtenende"
+set datafile separator ":"
+set boxwidth 0.7
+set style fill transparent solid 0.7
+set style line 1 lc rgb '#000000' lw 3
+set output 'lc4-auth-mac4-plot.pdf'
+plot "authentication-failures-mac4.txt" using 2:($4/$3) with boxes lc rgb "blue" title "", 0.00000059537 ls 1 title "1/36^4"
+
+
+
+reset
+set terminal pdf color
+set grid
+set title "|mac|=5"
+set autoscale yfix
+set xrange [-0.5:29.5]
+set yrange [0:]
+set ylabel "Wahrscheinlichkeit gleicher MAC"
+set xlabel "Abstand des veränderten Zeichens zum Nachrichtenende"
+set datafile separator ":"
+set boxwidth 0.7
+set style fill transparent solid 0.7
+set style line 1 lc rgb '#000000' lw 3
+set output 'lc4-auth-mac5-plot.pdf'
+plot "authentication-failures-mac5.txt" using 2:($4/$3) with boxes lc rgb "blue" title "", 0.000000016538 ls 1 title "1/36^5"
+
+
+
+#ind
+reset
+set grid
+set title "Zuordnung zufälliger Nachrichten und Chiffrate"
+set autoscale yfix
+set xrange [0:2000]
+#set yrange [0.5:]
+set xtics 200
+set ytics 0.02
+set ylabel "Erfolgswahrscheinlichkeit"
+set xlabel "Nachrichtenlänge"
+set datafile separator ";"
+set boxwidth 0.7
+set style line 1 lc 'blue' lw 2
+set style line 2 lc rgb '#ffa500' lw 2
+m(x) = (x-1.)/36.
+f(x) = 1-((1226./1296.)**m(x))*(35./36.)**(m(x))
+g(x) = 2.*f(x)*(1-f(x))+(f(x)*f(x))
+p(x) = g(x)+0.5*(1-g(x))
+#plot p(x) with line ls 1
+plot "random-ind-1000.txt" using 1:2 with line ls 1 title "", p(x) with line ls 2 title "Geschätzte Wahrsch. bei stat. Unabhängigkeit"
+
+
+
+

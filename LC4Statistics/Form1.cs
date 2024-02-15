@@ -21,6 +21,7 @@ using MathNet.Numerics.Statistics;
 using System.Numerics;
 using System.Runtime.ConstrainedExecution;
 using static System.Resources.ResXFileRef;
+using Accord.Statistics.Testing;
 
 namespace LC4Statistics
 {
@@ -1462,12 +1463,59 @@ namespace LC4Statistics
             List<byte> list = new List<byte>();
             for(int i=0;i<data.Length; i=i+2)
             {
+                if(i+1 >= data.Length)
+                {
+                    continue;
+                }
                 int d = data[i] * 36 + data[i + 1];
                 if (d >= 1280)
                 {
                     continue;
                 }
                 list.Add((byte)(d % 256));
+            }
+            return list;
+
+        }
+
+        private List<byte> convert36to256RandomBy2(byte[] data)
+        {
+            List<byte> list = new List<byte>();
+            for (int i = 0; i < data.Length-8; i = i + 8)
+            {
+                byte b = (byte)(((data[i]%2)*128)+ ((data[i+1] % 2) * 64)+ ((data[i+2] % 2) * 32)+ ((data[i+3] % 2) * 16)+ ((data[i+4] % 2) * 8)
+                    + ((data[i+5] % 2) * 4)+ ((data[i+6] % 2) * 2) + ((data[i+7] % 2)));
+                list.Add(b);
+            }
+            return list;
+
+        }
+
+        private List<byte> convert36toWordRandom(byte[] data)
+        {
+            List<byte> list = new List<byte>();
+            for (int i = 0; i < data.Length-7; i = i + 7)
+            {
+                if (i + 1 >= data.Length)
+                {
+                    continue;
+                }
+                ulong d = (ulong)(data[i] * 36l*36l*36l*36l*36l*36l 
+                    + data[i + 1] * 36l * 36l * 36l * 36l * 36l
+                    + data[i + 2] * 36l * 36l * 36l * 36l  
+                    + data[i + 3] * 36l * 36l * 36l  
+                    + data[i + 4] * 36l * 36l 
+                    + data[i + 5] * 36l 
+                    + data[i + 6])
+                    ;
+                ulong b32 = 1024l * 1024l * 1024 * 4;
+                if (d >= b32*18)
+                {
+                    continue;
+                }
+                uint val32bit = (uint)(d % b32);
+                byte[] intBytes = BitConverter.GetBytes(val32bit);
+                list.AddRange(intBytes);
             }
             return list;
 
@@ -1484,15 +1532,16 @@ namespace LC4Statistics
 
             using (var stream = new FileStream("output.bin", FileMode.Append))
             {
-                for (int j = 0; j < 1; j++)
+                //
+                for (int j = 0; j < 4*100; j++)
                 {
-                    byte[] data = new byte[1000000];
+                    byte[] data = new byte[100000000];
                     for (int i = 0; i < data.Length; i++)
                     {
                         data[i] = 0;
                     }
                     byte[] cipher = lc5.Encrypt(data);
-                    var converted = convert36to256Random(cipher).ToArray();
+                    var converted = convert36to256RandomBy2(cipher).ToArray();//convert36toWordRandom(cipher).ToArray();//convert36to256Random(cipher).ToArray();
                     stream.Write(converted, 0, converted.Length);
                 }
                     
@@ -1519,59 +1568,84 @@ namespace LC4Statistics
             
         }
 
-        int loopAfterForRandom()
-        {
-            Random r = new Random();
-            LC5 lc5 = new LC5(GetRandomKey(), 0, 0, (byte)r.Next(0, 6), (byte)r.Next(0, 6));
-            List<byte> enc = new List<byte>();
-            for (int j = 0; j < 100000000; j++)
-            {
-                byte c = lc5.SingleByteEncryption(0);
-                enc.Add(c);
-                if (j > 100)
-                {
-                    byte b = enc[enc.Count - 2];
-                    if (enc[enc.Count - 3] == c &&
-                        enc[enc.Count - 5] == c &&
-                        enc[enc.Count - 7] == c &&
-                        enc[enc.Count - 9] == c &&
-                        enc[enc.Count - 11] == c &&
-                        enc[enc.Count - 13] == c &&
-                        enc[enc.Count - 15] == c &&
-                        enc[enc.Count - 17] == c &&
-                        enc[enc.Count - 19] == c &&
-                        enc[enc.Count - 4] == b &&
-                        enc[enc.Count - 6] == b &&
-                        enc[enc.Count - 8] == b &&
-                        enc[enc.Count - 10] == b &&
-                        enc[enc.Count - 12] == b &&
-                        enc[enc.Count - 14] == b &&
-                        enc[enc.Count - 16] == b &&
-                        enc[enc.Count - 18] == b &&
-                        enc[enc.Count - 20] == b
-
-                        )
-                    {
-                        return j;
-                    }
-                }
-            }
-            return -1;
-        }
 
         private void button14_Click(object sender, EventArgs e)
         {
-            List<int> loopafter = new List<int>();
-            for(int k = 0; k < 50; k++)
+            //why DAB bytedist failure?
+            string[] s = textBox5.Text.Split(';');
+            byte[] key = LC5.StringToByteState(s[0]);
+            byte i2 = (byte)int.Parse(s[1]);
+            byte j2 = (byte)int.Parse(s[2]);
+            LC5 lc5 = new LC5(key, 0, 0, i2, j2);
+
+
+
+            int consecutiveWords = 3;
+            int wordlength = 8;
+            int[] samplePositions = { 0, 1, 2, 3,4, 5, 6, 7 };
+            int[] counter = new int[36 * samplePositions.Length*consecutiveWords];
+            int[] singleOutputCounter = new int[36];
+
+            int samples = 150000000;
+
+
+
+            for (int i = 0; i < samples; i++)
             {
-                int i = loopAfterForRandom();
-                if(i >= 0)
+                //get words:
+                byte[] clearWords = new byte[wordlength*consecutiveWords];
+                for (int c = 0; c < clearWords.Length; c++)
                 {
-                    loopafter.Add(i);
+                    clearWords[c] = 0;
                 }
-               
+                byte[] words = lc5.Encrypt(clearWords);
+                foreach(byte b in words)
+                {
+                    singleOutputCounter[b]++;
+                }
+                for (int k = 0; k < consecutiveWords; k++)
+                {
+                    byte[] word = words.Skip(k*wordlength).Take(wordlength).ToArray();
+                    for(int j = 0; j < samplePositions.Length; j++)
+                    {
+                        counter[36 * (k * samplePositions.Length + j) + word[samplePositions[j]]]++;
+                    }
+
+                }
             }
-            MessageBox.Show(loopafter.Average().ToString());
+
+            File.WriteAllLines("dab-bytedistrib.txt", singleOutputCounter.Select((x, c) => c.ToString() + ":" + x.ToString()).ToArray());
+
+            MessageBox.Show("hi");
+
+
+            /*for (int i=0;i< cipher.Length- wordlength*3; i += wordlength*3)
+            {
+                for(int k = 0; k < 3; k++)
+                {
+                    for(int j = 0; j < 3; j++)
+                    {
+                        int offset = j * ((wordlength-1)/2) + 3*k;
+                        counter[36*(3*k+j) + cipher[i + offset]]++;
+                    }
+                    
+                }
+            }*/
+
+            double[] should = new double[36 * 9];
+            for(int i = 0; i < should.Length; i++)
+            {
+                should[i] = samples / 36d;
+            }
+
+            ChiSquareTest chiSquareTest = new ChiSquareTest(counter.Select(x => (double)x).ToArray(), should, 9*35);
+            MessageBox.Show(chiSquareTest.PValue.ToString());
+            //chiSquareTest.PValue; // gets p-value
+            //chiSquareTest.Significant; // true if statistically significant
+
+
+            File.WriteAllLines("dab.txt", counter.Select((x,c) => c.ToString()+":"+x.ToString()).ToArray());
+            //MessageBox.Show(same.ToString());
         }
 
         private void button9_Click_1(object sender, EventArgs e)
@@ -1599,6 +1673,47 @@ namespace LC4Statistics
             byte[] cipher = LC4.StringToByteState(textBox6.Text);
             byte[] clear = lc4.Decrypt(cipher);
             textBox7.Text = LC4.BytesToString(clear);
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            int[] occurences = new int[36];
+            for (int i = 0; i < 100; i++)
+            {
+                Random r = new Random();
+                LC5 lc5 = new LC5(GetRandomKey(), (byte)r.Next(0, 6), (byte)r.Next(0, 6), 0, 0);
+                
+                for (int j = 0; j < 10000000; j++)
+                {
+                    occurences[lc5.SingleByteEncryption(0)]++;
+                }
+                
+            }
+            File.WriteAllLines("bytedistrib.txt", occurences.Select((x, c) => c.ToString() + ":" + x.ToString()).ToArray());
+
+        }
+
+        private void byte_distr_test()
+        {
+
+        }
+
+        private void button9_Click(object sender, EventArgs e)
+        {
+            RandomNumberGenerator rng = RandomNumberGenerator.Create();
+            using (var stream = new FileStream("sanity-output.bin", FileMode.Append))
+            {
+                for (int j = 0; j < 100; j++)
+                {
+                    
+                    byte[] data = new byte[100000000];
+                    rng.GetBytes(data);
+                    data = data.Where(x => x < 252).Select(x => (byte)(x % 36)).ToArray();
+                    var converted = convert36to256Random(data).ToArray();
+                    stream.Write(converted, 0, converted.Length);
+                }
+
+            }
         }
     }
 
