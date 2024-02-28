@@ -113,7 +113,8 @@ for length in range(2,37):
     if length==2:
         print(sum)
     var = omega_star(length,36)
-    r = (length/36)*(sum/length)+((36-length)/36)*var
+    p_zero = (35/36)**length
+    r = (1-p_zero)*(sum/length)+p_zero*var
     p = r/(36**length)
     print(str(length)+" & "+str(r)+" & "+str(p)+"\\\\")
 

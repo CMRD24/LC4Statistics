@@ -35,6 +35,52 @@ namespace LC4Statistics
             return true;
         }
 
+        private int getPromisingIndex(IEnumerable<byte> plain, IEnumerable<byte> cipher)
+        {
+            List<Tuple<int, int>> prIndexes = new List<Tuple<int, int>>();
+            for (int i = 0; i < plain.Count() - 100; i++)
+            {
+                List<byte> pool = new List<byte>();
+                var pl = plain.Skip(i).Take(10).ToArray();
+                var ci = cipher.Skip(i).Take(10).ToArray();
+                int score = 0;
+                if (ci[0] == 0 && ci[1] == 0 && ci[2] == 0)
+                {
+                    score += 5;
+                }
+                if (pl[0] == ci[0])
+                {
+                    score++;
+                    if (pl[1] == 0 || ci[1] == 0)
+                    {
+                        score++;
+                        var z = pl.Take(2).Concat(ci.Take(2));
+                        if (containsAny(z, new byte[] { pl[2], ci[2] }))
+                        {
+                            score++;
+                            var z3 = pl.Take(3).Concat(ci.Take(3));
+                            if (containsAny(z3, new byte[] { pl[3], ci[3] }))
+                            {
+                                score++;
+                                var z4 = pl.Take(4).Concat(ci.Take(4));
+                                if (containsAny(z4, new byte[] { pl[4], ci[4] }))
+                                {
+                                    score++;
+                                    var z5 = pl.Take(5).Concat(ci.Take(5));
+                                    if (containsAny(z5, new byte[] { pl[5], ci[5] }))
+                                    {
+                                        score++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                prIndexes.Add(Tuple.Create(i, score));
+            }
+            return prIndexes.OrderByDescending(x => x.Item2).First().Item1;
+        }
+
         public void testAverageDepth(byte[] key, byte[] plain, int numberOfUnknowns)
         {
 
